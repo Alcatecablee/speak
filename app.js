@@ -59,6 +59,9 @@
   let currentSalesforcePayload = null;
 
   async function pollLocalEngine() {
+    if (typeof window.__instances === 'function' || typeof window.__emit === 'function') {
+      return;
+    }
     try {
       const res = await fetch(`${LOCAL_ENGINE_URL}/status`, { signal: AbortSignal.timeout(1500) });
       if (res.ok) {
