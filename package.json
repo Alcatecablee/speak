@@ -7,7 +7,7 @@
     "build": "npm run build:css",
     "build:css": "tailwindcss -i ./src/input.css -o ./styles.css --minify",
     "watch:css": "tailwindcss -i ./src/input.css -o ./styles.css --watch",
-    "serve": "node server.mjs",
+    "serve": "node dev-server.mjs",
     "test": "node --test tests/procedures.test.mjs && node tests/verify.mjs",
     "test:unit": "node --test tests/procedures.test.mjs",
     "test:e2e": "node tests/verify.mjs"
