@@ -1,4 +1,4 @@
-/* Speak Your Notes – vanilla JS with Local Engine Two-Stream Integration */
+/* Speak Your Notes – vanilla JS with Local Engine Two-Stream Integration & Procedure Hub */
 (() => {
   'use strict';
 
@@ -126,20 +126,26 @@
   }
 
   function setMicButtonState(stateType, label = null) {
+    state = stateType;
+    micBtn.setAttribute('data-state', stateType === 'recording' ? 'recording' : 'idle');
     micBtn.setAttribute('aria-pressed', String(stateType === 'recording'));
-    micBtn.classList.remove('bg-teal-600', 'hover:bg-teal-500', 'bg-red-600', 'hover:bg-red-500', 'bg-amber-600', 'hover:bg-amber-500');
+    micBtn.classList.remove('bg-teal-600', 'hover:bg-teal-500', 'bg-red-600', 'hover:bg-red-500', 'bg-amber-600', 'hover:bg-amber-500', 'mic-recording');
 
     if (stateType === 'recording') {
-      micBtn.classList.add('bg-red-600', 'hover:bg-red-500');
-      micLabel.textContent = label || 'Stop Call Capture';
+      micBtn.classList.add('bg-red-600', 'hover:bg-red-500', 'mic-recording');
+      micLabel.textContent = label || (engineConnected ? 'Stop Call Capture' : 'Stop Dictation');
     } else if (stateType === 'processing') {
       micBtn.classList.add('bg-amber-600', 'hover:bg-amber-500');
       micLabel.textContent = label || 'Processing Call…';
+    } else if (stateType === 'starting') {
+      micBtn.classList.add('bg-amber-600', 'hover:bg-amber-500');
+      micLabel.textContent = label || 'Starting…';
     } else {
       micBtn.classList.add('bg-teal-600', 'hover:bg-teal-500');
       micLabel.textContent = label || (engineConnected ? 'Start Call Capture' : 'Start Dictation');
     }
   }
+  const setMicState = setMicButtonState;
 
   async function startEngineCallCapture() {
     try {
@@ -231,6 +237,10 @@
       `;
     });
     transcriptContainer.innerHTML = html || '<p class="italic text-slate-400">Empty transcript.</p>';
+
+    // Trigger Procedure Hub evaluation on transcript text
+    const fullTranscriptText = turns.map((t) => t.text).join(' ');
+    triggerProcedureContext(fullTranscriptText);
   }
 
   function renderReview(reviewData) {
@@ -239,6 +249,9 @@
     // Render Markdown summary nicely
     const md = reviewData.markdown || '';
     reviewContainer.innerHTML = formatSimpleMarkdown(md);
+
+    // Trigger Procedure Hub evaluation on review summary
+    triggerProcedureContext(md);
 
     // Render Salesforce Draft
     currentSalesforcePayload = reviewData.salesforce_draft;
@@ -424,15 +437,25 @@
     onNotesChanged();
   }
 
-  // ---------------------------------------------------------------- notes state
+  // ---------------------------------------------------------------- notes state & Procedure Hub
   let saveTimer = null;
   let procedureReminder = null;
+
+  function triggerProcedureContext(extraText = '') {
+    if (!procedureReminder) return;
+    const combined = [notes.value, extraText].filter(Boolean).join('\n');
+    if (combined.trim()) {
+      procedureReminder.textChanged(combined);
+    }
+  }
+
   function onNotesChanged() {
     updateCounter();
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => store.set('notes', notes.value), 250);
     if (procedureReminder) procedureReminder.textChanged(notes.value);
   }
+
   function updateCounter() {
     const t = notes.value.trim();
     const words = t ? t.split(/\s+/).length : 0;
@@ -478,6 +501,7 @@
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'btn-tag shrink-0';
+      btn.dataset.tag = tag.label;
       btn.textContent = tag.label;
       btn.addEventListener('click', () => {
         const val = typeof tag.text === 'function' ? tag.text() : tag.text;
@@ -532,49 +556,139 @@
   let recognition = null;
   let wantRecording = false;
   let state = 'idle';
+  let sessionStartedAt = 0;
+  let quickEnds = 0;
+  let lastFinal = { text: '', at: 0 };
 
-  function startFallbackDictation() {
-    hideBanner();
-    if (!SR) {
-      showBanner('<strong>Speech recognition isn\'t supported in this browser.</strong> Use Chrome or Edge, or start the Speak Local Engine.');
-      setStatus('Dictation unavailable', 'err');
-      return;
-    }
-    wantRecording = true;
+  const VOICE_COMMANDS = [
+    [/\s*\bnew paragraph\b[.,]?\s*/gi, '\n\n'],
+    [/\s*\bnew line\b[.,]?\s*/gi, '\n'],
+    [/\s*\bfull stop\b/gi, '.'],
+    [/\s*\bquestion mark\b/gi, '?'],
+    [/\s*\bexclamation mark\b/gi, '!'],
+    [/\s*\bcomma\b/gi, ','],
+  ];
+
+  function applyVoiceCommands(t) {
+    let out = t;
+    for (const [re, rep] of VOICE_COMMANDS) out = out.replace(re, rep);
+    return out;
+  }
+
+  function stopInterim() { interimEl.textContent = ''; }
+
+  function permissionHelp() {
+    return '<strong>Microphone access is blocked.</strong> Tap the lock / site-settings icon in the address bar, set <em>Microphone</em> to <em>Allow</em>, then try again.';
+  }
+
+  function fatal(html) {
+    wantRecording = false;
+    showBanner(html);
+    setMicButtonState('idle');
+    stopInterim();
+  }
+
+  function beginFallbackSession() {
     const r = new SR();
     recognition = r;
     r.continuous = true;
     r.interimResults = true;
+    r.maxAlternatives = 1;
     r.lang = langSel.value;
-    setMicButtonState('recording');
-    setStatus('Listening…', 'rec');
+    setMicButtonState('starting');
+
+    r.onstart = () => {
+      if (r !== recognition) return;
+      sessionStartedAt = Date.now();
+      setMicButtonState('recording', 'Stop Dictation');
+      setStatus('Listening…', 'rec');
+    };
 
     r.onresult = (e) => {
+      if (r !== recognition) return;
+      quickEnds = 0;
       let interim = '';
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const res = e.results[i];
-        if (res.isFinal) insertAtCaret(res[0].transcript.trim(), { dictation: true });
-        else interim += res[0].transcript;
+        const t = res[0].transcript;
+        if (res.isFinal) {
+          const chunk = applyVoiceCommands(t.trim());
+          const now = Date.now();
+          if (!chunk || (chunk === lastFinal.text && now - lastFinal.at < 1200)) continue;
+          lastFinal = { text: chunk, at: now };
+          insertAtCaret(chunk, { dictation: true });
+        } else {
+          interim += t;
+        }
       }
       interimEl.textContent = interim ? '… ' + interim.trim() : '';
     };
 
     r.onerror = (e) => {
-      setStatus(`Dictation error: ${e.error}`, 'err');
+      if (r !== recognition) return;
+      switch (e.error) {
+        case 'not-allowed':
+        case 'service-not-allowed':
+          fatal(permissionHelp());
+          setStatus('Microphone blocked', 'err');
+          break;
+        case 'audio-capture':
+          fatal('<strong>No microphone found.</strong> Check that a microphone is connected and not in use by another app.');
+          break;
+        case 'network':
+          fatal('<strong>Speech service unreachable.</strong> Dictation needs an internet connection in this browser.');
+          break;
+        case 'language-not-supported':
+          fatal('<strong>That language isn\'t supported</strong> by this browser. Try EN-US or EN-GB.');
+          break;
+        case 'no-speech':
+        case 'aborted':
+        default:
+          break;
+      }
     };
 
     r.onend = () => {
-      interimEl.textContent = '';
-      if (!wantRecording) setMicButtonState('idle');
+      if (r !== recognition) return;
+      stopInterim();
+      if (!wantRecording) { setMicButtonState('idle'); setStatus('Ready'); return; }
+      if (Date.now() - sessionStartedAt < 1000) quickEnds++;
+      if (quickEnds > 3) {
+        fatal('<strong>Dictation keeps stopping.</strong> Check your microphone and connection, then tap Start Dictation again.');
+        return;
+      }
+      setTimeout(() => { if (wantRecording && r === recognition) beginFallbackSession(); }, 150);
     };
 
-    try { r.start(); } catch (err) { setStatus('Could not start microphone', 'err'); }
+    try {
+      r.start();
+    } catch (err) {
+      fatal('<strong>Couldn\'t start dictation.</strong> ' + (err && err.message ? err.message : 'Please try again.'));
+    }
+  }
+
+  function startFallbackDictation() {
+    hideBanner();
+    if (!SR) {
+      showBanner('<strong>Speech recognition isn\'t supported in this browser.</strong> Use Chrome, Edge or Safari. You can still type and use the shortcut tags.');
+      setStatus('Dictation unavailable', 'err');
+      return;
+    }
+    if (!window.isSecureContext && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+      showBanner('<strong>Microphone needs a secure connection.</strong> Open the app over <code>https://</code> or <code>http://localhost</code>.');
+      setStatus('Dictation unavailable', 'err');
+      return;
+    }
+    wantRecording = true;
+    quickEnds = 0;
+    beginFallbackSession();
   }
 
   function stopFallbackDictation() {
     wantRecording = false;
     if (recognition) { try { recognition.stop(); } catch {} }
     setMicButtonState('idle');
+    stopInterim();
     setStatus('Ready');
   }
 
@@ -596,19 +710,72 @@
     }
   });
 
+  async function watchMicPermission() {
+    if (!navigator.permissions || !navigator.permissions.query) return;
+    try {
+      const p = await navigator.permissions.query({ name: 'microphone' });
+      const apply = () => {
+        if (p.state === 'denied') {
+          showBanner(permissionHelp());
+          if (state === 'idle') setStatus('Microphone blocked', 'err');
+        } else if (!wantRecording && !bannerEl.hidden && bannerEl.textContent.includes('blocked')) {
+          hideBanner();
+          if (state === 'idle') setStatus('Ready');
+        }
+      };
+      p.onchange = apply;
+      apply();
+    } catch {}
+  }
+
+  // ---------------------------------------------------------------- shortcuts & theme
+  document.addEventListener('keydown', (e) => {
+    // Ctrl/Cmd + Shift + Space toggles dictation; Ctrl/Cmd + Shift + C copies.
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.code === 'Space') { e.preventDefault(); micBtn.click(); }
+    else if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.code === 'KeyC') { e.preventDefault(); copyText(); }
+  });
+  document.addEventListener('visibilitychange', () => { if (document.hidden && wantRecording) stopFallbackDictation(); });
+
+  langSel.addEventListener('change', () => {
+    store.set('lang', langSel.value);
+    if (wantRecording) {
+      const old = recognition; recognition = null;
+      try { old && old.abort(); } catch {}
+      beginFallbackSession();
+    }
+  });
+
+  themeBtn.addEventListener('click', () => {
+    const isDark = document.documentElement.classList.toggle('dark');
+    store.set('theme', isDark ? 'dark' : 'light');
+    const meta = $('meta-theme');
+    if (meta) meta.setAttribute('content', isDark ? '#0f172a' : '#f1f5f9');
+  });
+
+  copyBtn.addEventListener('click', copyText);
+  clearBtn.addEventListener('click', clearNotes);
+  tidyBtn.addEventListener('click', tidyNotes);
+
   // ---------------------------------------------------------------- init
   renderTags();
   notes.value = store.get('notes', '');
   notes.setSelectionRange(notes.value.length, notes.value.length);
   langSel.value = store.get('lang', 'en-ZA');
+  if (langSel.value !== store.get('lang', 'en-ZA')) langSel.value = 'en-ZA';
   updateCounter();
   setMicButtonState('idle');
+
+  if (!SR) {
+    showBanner('<strong>Speech recognition isn\'t supported in this browser.</strong> Use Chrome, Edge or Safari. You can still type and use the shortcut tags.');
+    setStatus('Dictation unavailable', 'err');
+  }
+  watchMicPermission();
 
   // Start polling Local Engine on loopback
   pollLocalEngine();
   setInterval(pollLocalEngine, 2000);
 
-  // Procedure Hub
+  // Procedure Hub awareness layer
   (function initProcedureLayer() {
     const PH = window.ProcedureHub;
     if (!PH || !PH.createReminderController) return;
@@ -630,6 +797,10 @@
         },
       },
     });
+
+    if (notes.value.trim()) {
+      procedureReminder.textChanged(notes.value);
+    }
   })();
 
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
