@@ -4,7 +4,6 @@
   "private": true,
   "description": "Voice-to-text dictation notepad for technical support notes (PWA).",
   "scripts": {
-    "build": "npm run build:css",
     "build:css": "tailwindcss -i ./src/input.css -o ./styles.css --minify",
     "watch:css": "tailwindcss -i ./src/input.css -o ./styles.css --watch",
     "serve": "node dev-server.mjs",
