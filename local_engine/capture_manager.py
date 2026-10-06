@@ -98,11 +98,19 @@ class SessionManager:
                 loop_rate = int(default_loopback["defaultSampleRate"])
                 loop_channels = default_loopback["maxInputChannels"]
 
-                # Remove previous WAV files
+                # Remove previous WAV files and session artifacts
                 if os.path.exists(self.mic_file):
                     os.remove(self.mic_file)
                 if os.path.exists(self.loop_file):
                     os.remove(self.loop_file)
+
+                for artifact_name in ("transcript.json", "transcript.txt", "analysis.json", "analysis_review.md", "salesforce_draft_payload.json"):
+                    p = self.output_dir / artifact_name
+                    if p.exists():
+                        try:
+                            p.unlink()
+                        except Exception:
+                            pass
 
                 self._f_mic = sf.SoundFile(self.mic_file, mode='x', samplerate=mic_rate, channels=mic_channels, subtype='PCM_16')
                 self._f_loop = sf.SoundFile(self.loop_file, mode='x', samplerate=loop_rate, channels=loop_channels, subtype='PCM_16')
@@ -228,10 +236,11 @@ class SessionManager:
                 with self._lock:
                     self.stage = "transcription"
                 logger.info("Running transcription pipeline...")
-                pipeline = TranscriptionPipeline(model_name=self.whisper_model, output_dir=str(self.output_dir))
+                pipeline = TranscriptionPipeline(model_name=self.whisper_model)
                 pipeline.process_session(
                     consultant_audio_path=self.mic_file,
-                    client_audio_path=self.loop_file
+                    client_audio_path=self.loop_file,
+                    output_dir=str(self.output_dir)
                 )
             else:
                 logger.info("Using cached transcript for instant processing.")
@@ -261,8 +270,13 @@ class SessionManager:
     def load_demo_sample(self) -> Dict[str, Any]:
         """Loads pre-analyzed real sample for immediate demonstration."""
         with self._lock:
+            sample_source = self.output_dir / "demo_sample_transcript.json"
             transcript_json_path = self.output_dir / "transcript.json"
-            if not transcript_json_path.exists():
+
+            if sample_source.exists():
+                import shutil
+                shutil.copyfile(sample_source, transcript_json_path)
+            elif not transcript_json_path.exists():
                 raise FileNotFoundError("Sample transcript.json not found.")
 
             self.session_id = "sample_real_call_demo"

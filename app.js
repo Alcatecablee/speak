@@ -166,6 +166,12 @@
         micLabel.textContent = `Stop Call Capture (${formatDuration(engineElapsedSeconds)})`;
       }, 1000);
       setMicButtonState('recording');
+
+      // Clear previous call artifacts while new recording is in progress
+      transcriptContainer.innerHTML = '<p class="italic text-slate-400">Recording live call… transcript will generate upon stopping capture.</p>';
+      transcriptCount.textContent = 'Recording…';
+      reviewContainer.innerHTML = '<p class="italic text-slate-400">Recording live call… AI analysis will generate upon stopping capture.</p>';
+      salesforceContainer.innerHTML = '<p class="italic text-slate-400">Recording live call… Salesforce draft will generate upon stopping capture.</p>';
     } catch (e) {
       showToast(`Failed to start capture: ${e.message}`);
       setStatus('Capture failed', 'err');
