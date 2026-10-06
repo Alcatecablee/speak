@@ -141,9 +141,12 @@ class SessionManager:
                     stream_callback=loop_cb
                 )
 
+                self._stream_mic.start_stream()
+                self._stream_loop.start_stream()
+
                 # Start disk writer threads
-                t1 = threading.Thread(target=self._disk_writer, args=(self._q_mic, self._f_mic, "MIC"), daemon=True)
-                t2 = threading.Thread(target=self._disk_writer, args=(self._q_loop, self._f_loop, "LOOPBACK"), daemon=True)
+                t1 = threading.Thread(target=self._disk_writer, args=(self._q_mic, self._f_mic, "MIC", mic_channels), daemon=True)
+                t2 = threading.Thread(target=self._disk_writer, args=(self._q_loop, self._f_loop, "LOOPBACK", loop_channels), daemon=True)
                 t1.start()
                 t2.start()
                 self._writer_threads = [t1, t2]
@@ -167,18 +170,20 @@ class SessionManager:
                 self._cleanup_streams()
                 raise RuntimeError(self.error_message)
 
-    def _disk_writer(self, q: queue.Queue, soundfile_handle: sf.SoundFile, stream_tag: str):
+    def _disk_writer(self, q: queue.Queue, soundfile_handle: sf.SoundFile, stream_tag: str, channels: int = 1):
         while not self._capture_stop_event.is_set() or not q.empty():
             try:
                 data = q.get(timeout=0.1)
                 audio_np = np.frombuffer(data, dtype=np.int16)
+                if channels > 1:
+                    audio_np = audio_np.reshape(-1, channels)
                 soundfile_handle.write(audio_np)
                 q.task_done()
             except queue.Empty:
                 continue
             except Exception as e:
                 logger.warning(f"Error writing {stream_tag} audio to disk: {e}")
-                break
+                continue
 
     def stop_capture_and_process(self, skip_stt_demo: bool = False) -> Dict[str, Any]:
         """Stops audio capture and initiates background transcription + analysis."""
