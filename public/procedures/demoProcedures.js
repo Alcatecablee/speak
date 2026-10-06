@@ -1,10 +1,6 @@
 /*
  * DEVELOPMENT DEMO DATA ONLY.
- * These are invented examples used to prove the contextual-reminder concept inside Speak Your Notes.
- * They are NOT real procedures and are not connected to Procedure Hub or any real organisation.
- *
- * This file is the ONLY place demo procedures live. The UI never imports it – it talks to a
- * procedure service (see procedureService.js), which a real Procedure Hub API client can replace.
+ * Contextual procedures used to demonstrate Procedure Hub surface intelligence in Speak Your Notes.
  */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory();
@@ -26,9 +22,9 @@
       source: SOURCE,
       isDemo: true,
       concepts: [
-        { name: 'till roll', terms: ['till roll', 'till roll slip', 'till roll slips', 'supply till roll'], weight: 3, required: true },
-        { name: 'supply', terms: ['supply', 'supplied', 'supplying', 'we dont supply'], weight: 2 },
-        { name: 'limpopo', terms: ['limpopo'], weight: 2 },
+        { name: 'till roll', terms: ['till roll', 'till roll slip', 'till roll slips', 'till rolls'], weight: 3, required: true },
+        { name: 'supply', terms: ['supply', 'supplied', 'supplying', 'we dont supply', 'assistance', 'need', 'needs', 'order', 'request', 'dispatch'], weight: 2 },
+        { name: 'limpopo', terms: ['limpopo', 'polokwane', 'joburg', 'johannesburg', 'client', 'outside'], weight: 2 },
       ],
     },
     {
@@ -43,8 +39,8 @@
       isDemo: true,
       concepts: [
         { name: 'cash up', terms: ['cash up', 'cashup', 'cashing up', 'cashed up'], weight: 3, required: true },
-        { name: 'open tables', terms: ['open table', 'table open', 'table still open', 'unclosed table', 'tables open'], weight: 2 },
-        { name: 'problem', terms: ['cannot', 'cant', 'unable', 'not able', 'wont', 'failed', 'error', 'stuck'], weight: 1 },
+        { name: 'open tables', terms: ['open table', 'table open', 'table still open', 'unclosed table', 'tables open', 'open tables'], weight: 2 },
+        { name: 'problem', terms: ['cannot', 'cant', 'unable', 'not able', 'wont', 'failed', 'error', 'stuck', 'issue', 'problem', 'assistance', 'help'], weight: 1 },
       ],
     },
     {
@@ -58,10 +54,10 @@
       source: SOURCE,
       isDemo: true,
       concepts: [
-        { name: 'kitchen printer', terms: ['kitchen printer'], weight: 3 },
+        { name: 'kitchen printer', terms: ['kitchen printer', 'orders printer', 'order printer', 'kitchen printers'], weight: 3 },
         { name: 'kitchen', terms: ['kitchen'], weight: 2 },
         { name: 'printer', terms: ['printer'], weight: 1 },
-        { name: 'printer problem', terms: ['offline', 'printer offline', 'not printing', 'stopped printing', 'stop printing', 'not responding'], weight: 2 },
+        { name: 'printer problem', terms: ['offline', 'printer offline', 'not printing', 'stopped printing', 'stop printing', 'not responding', 'down', 'disconnected', 'error', 'issue'], weight: 2 },
       ],
     },
     {
@@ -75,10 +71,9 @@
       source: SOURCE,
       isDemo: true,
       concepts: [
-        { name: 'adumo', terms: ['adumo'], weight: 2 },
-        { name: 'device', terms: ['ped', 'card machine', 'payment terminal'], weight: 3 },
-        { name: 'terminal', terms: ['terminal'], weight: 1 },
-        { name: 'problem', terms: ['offline', 'not connecting', 'not working', 'not communicating', 'wont connect'], weight: 2 },
+        { name: 'adumo', terms: ['adumo'], weight: 2, required: true },
+        { name: 'device', terms: ['ped', 'card machine', 'payment terminal', 'terminal', 'device', 'pin pad'], weight: 3 },
+        { name: 'problem', terms: ['offline', 'not connecting', 'not working', 'not communicating', 'wont connect', 'issue', 'down', 'error'], weight: 2 },
       ],
     },
   ];
