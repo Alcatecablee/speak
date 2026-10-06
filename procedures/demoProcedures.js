@@ -26,7 +26,7 @@
       source: SOURCE,
       isDemo: true,
       concepts: [
-        { name: 'till roll', terms: ['till roll', 'till roll slip', 'till roll slips', 'supply till roll'], weight: 3, required: true },
+        { name: 'till roll', terms: ['till roll', 'till roll slip', 'till roll slips'], weight: 3, required: true },
         { name: 'supply', terms: ['supply', 'supplied', 'supplying', 'we dont supply'], weight: 2 },
         { name: 'limpopo', terms: ['limpopo'], weight: 2 },
       ],
