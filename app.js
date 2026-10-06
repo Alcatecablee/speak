@@ -541,17 +541,26 @@
     });
   }
 
+  function tidy(text) {
+    return text
+      .trim()
+      .replace(/[ \t]+/g, ' ')
+      .replace(/ ?\n ?/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .replace(/ +([,.!?;:])/g, '$1')
+      .replace(/([,;])(?=[A-Za-z])/g, '$1 ')
+      .replace(/(^|[.!?]\s+|\n)((?:[-*•]\s+)?)([a-z])/g, (_, a, b, c) => a + b + c.toUpperCase())
+      .replace(/\bi\b(?=[\s',.!?]|$)/g, 'I')
+      .trim() + (text.trim() ? '\n' : '');
+  }
+
   function tidyNotes() {
-    const raw = notes.value;
-    if (!raw.trim()) return;
-    let t = raw.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n');
-    t = t.replace(/(^|\n)([a-z])/g, (_, p, c) => p + c.toUpperCase());
-    t = t.replace(/([.!?]\s+)([a-z])/g, (_, p, c) => p + c.toUpperCase());
-    t = t.replace(/\s+([.,!?:;])/g, '$1');
-    t = t.replace(/([.,!?:;])(?=[^\s\d)\]}"'’\n])/g, '$1 ');
-    notes.value = t;
+    const prev = notes.value;
+    const next = tidy(prev);
+    if (next === prev || !prev.trim()) { showToast('Already tidy'); return; }
+    notes.value = next;
     onNotesChanged();
-    showToast('Tidied formatting.');
+    showToast('Notes tidied', 'Undo', () => { notes.value = prev; onNotesChanged(); });
   }
 
   // ---------------------------------------------------------------- speech fallback (Web Speech API)

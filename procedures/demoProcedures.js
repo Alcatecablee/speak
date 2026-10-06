@@ -23,8 +23,8 @@
       isDemo: true,
       concepts: [
         { name: 'till roll', terms: ['till roll', 'till roll slip', 'till roll slips', 'till rolls'], weight: 3, required: true },
-        { name: 'supply', terms: ['supply', 'supplied', 'supplying', 'we dont supply', 'assistance', 'need', 'needs', 'order', 'request', 'dispatch'], weight: 2 },
-        { name: 'limpopo', terms: ['limpopo', 'polokwane', 'joburg', 'johannesburg', 'client', 'outside'], weight: 2 },
+        { name: 'supply', terms: ['supply', 'supplied', 'supplying', "we don't supply", 'dont supply', 'we dont supply', 'cannot supply', 'wont supply'], weight: 2 },
+        { name: 'limpopo', terms: ['limpopo', 'polokwane', 'tzaneen', 'mokopane', 'thohoyandou', 'outside limpopo', 'in limpopo'], weight: 2 },
       ],
     },
     {
@@ -40,7 +40,7 @@
       concepts: [
         { name: 'cash up', terms: ['cash up', 'cashup', 'cashing up', 'cashed up'], weight: 3, required: true },
         { name: 'open tables', terms: ['open table', 'table open', 'table still open', 'unclosed table', 'tables open', 'open tables'], weight: 2 },
-        { name: 'problem', terms: ['cannot', 'cant', 'unable', 'not able', 'wont', 'failed', 'error', 'stuck', 'issue', 'problem', 'assistance', 'help'], weight: 1 },
+        { name: 'problem', terms: ['cannot', "can't", 'cant', 'unable', 'not able', 'won\'t', 'wont', 'failed', 'error', 'stuck', 'issue', 'problem'], weight: 1 },
       ],
     },
     {
@@ -73,7 +73,7 @@
       concepts: [
         { name: 'adumo', terms: ['adumo'], weight: 2, required: true },
         { name: 'device', terms: ['ped', 'card machine', 'payment terminal', 'terminal', 'device', 'pin pad'], weight: 3 },
-        { name: 'problem', terms: ['offline', 'not connecting', 'not working', 'not communicating', 'wont connect', 'issue', 'down', 'error'], weight: 2 },
+        { name: 'problem', terms: ['offline', 'not connecting', 'not working', 'not communicating', "won't connect", 'wont connect', 'issue', 'down', 'error'], weight: 2 },
       ],
     },
   ];
