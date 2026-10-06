@@ -1,0 +1,19 @@
+{
+  "name": "speak-your-notes",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Voice-to-text dictation notepad for technical support notes (PWA).",
+  "scripts": {
+    "build": "npm run build:css",
+    "build:css": "tailwindcss -i ./src/input.css -o ./styles.css --minify",
+    "watch:css": "tailwindcss -i ./src/input.css -o ./styles.css --watch",
+    "serve": "node server.mjs",
+    "test": "node --test tests/procedures.test.mjs && node tests/verify.mjs",
+    "test:unit": "node --test tests/procedures.test.mjs",
+    "test:e2e": "node tests/verify.mjs"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.48.0",
+    "tailwindcss": "^3.4.17"
+  }
+}

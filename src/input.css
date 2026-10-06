@@ -1,0 +1,56 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  [hidden] { display: none !important; }
+  html, body { height: 100%; }
+  body {
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior-y: none;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold
+           transition active:scale-[0.97] focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2
+           focus-visible:ring-teal-500 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-900
+           select-none;
+    min-height: 48px;
+  }
+  .btn-secondary {
+    @apply bg-slate-200 text-slate-800 hover:bg-slate-300
+           dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700;
+  }
+  .chip {
+    @apply shrink-0 rounded-full border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-700
+           transition hover:border-teal-500 hover:text-teal-700 active:scale-95 select-none
+           dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-teal-400 dark:hover:text-teal-300;
+  }
+}
+
+/* Recording feedback: pulsing red ring around the mic button */
+@keyframes mic-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.55); }
+  70%  { box-shadow: 0 0 0 18px rgba(239, 68, 68, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+.mic-recording { animation: mic-pulse 1.4s ease-out infinite; }
+
+@keyframes rec-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+.rec-dot { animation: rec-dot 1s ease-in-out infinite; }
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+.shake { animation: shake 0.25s ease-in-out 2; }
+
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mic-recording, .rec-dot, .shake { animation: none; }
+}
