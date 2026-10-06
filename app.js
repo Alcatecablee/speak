@@ -312,11 +312,7 @@
     tabs.forEach((t) => {
       const active = t.id === tabId;
       t.panel.hidden = !active;
-      if (active) {
-        t.btn.className = 'flex-1 rounded-lg bg-white py-1.5 text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100 font-bold';
-      } else {
-        t.btn.className = 'flex-1 rounded-lg py-1.5 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100';
-      }
+      t.btn.className = active ? 'tab-item-active' : 'tab-item';
     });
 
     if (tagsNav) tagsNav.hidden = tabId !== 'notes';
