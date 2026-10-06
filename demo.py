@@ -60,16 +60,17 @@ def run_demo(
     # Step 1: Transcription (or skip if transcript.json already exists and requested)
     if not skip_stt or not transcript_json_path.exists():
         print_section("STEP 1: TWO-STREAM TRANSCRIPTION & SPEAKER ATTRIBUTION")
-        pipeline = TranscriptionPipeline(model_name=whisper_model, output_dir=output_dir)
+        pipeline = TranscriptionPipeline(model_name=whisper_model)
         print("Transcribing Consultant Mic and Client Loopback independently...")
         start_t = time.time()
         result = pipeline.process_session(
             consultant_audio_path=mic_path,
-            client_audio_path=loopback_path
+            client_audio_path=loopback_path,
+            output_dir=output_dir
         )
         elapsed = time.time() - start_t
         print(f"Transcription finished in {elapsed:.1f}s.")
-        print(f"Status: {result.status.upper()} | Total Merged Turns: {len(result.merged_turns)}")
+        print(f"Status: {result['status'].upper()} | Total Merged Turns: {len(result['merged_turns'])}")
         print(f"Saved: {output_dir}/transcript.txt & {output_dir}/transcript.json")
     else:
         print_section("STEP 1: USING EXISTING SPEAKER-ATTRIBUTED TRANSCRIPT")

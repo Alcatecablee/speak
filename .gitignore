@@ -4,4 +4,4 @@ node_modules/
 *.wav
 __pycache__/
 *.pyc
-
+recordings/
