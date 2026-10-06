@@ -1,4 +1,4 @@
-/* Speak Your Notes – vanilla JS, no dependencies. */
+/* Speak Your Notes – vanilla JS with Local Engine Two-Stream Integration */
 (() => {
   'use strict';
 
@@ -16,11 +16,33 @@
   const counterEl = $('counter');
   const bannerEl = $('banner');
   const tagsEl = $('tags');
+  const tagsNav = $('tags-nav');
   const langSel = $('lang');
   const themeBtn = $('theme-toggle');
   const toastEl = $('toast');
   const toastText = $('toast-text');
   const toastAction = $('toast-action');
+
+  // Local Engine elements
+  const engineDot = $('engine-dot');
+  const engineText = $('engine-text');
+  const tabNotes = $('tab-notes');
+  const tabTranscript = $('tab-transcript');
+  const tabReview = $('tab-review');
+  const tabSalesforce = $('tab-salesforce');
+
+  const panelNotes = $('panel-notes');
+  const panelTranscript = $('panel-transcript');
+  const panelReview = $('panel-review');
+  const panelSalesforce = $('panel-salesforce');
+
+  const transcriptContainer = $('transcript-container');
+  const transcriptCount = $('transcript-count');
+  const reviewContainer = $('review-container');
+  const reviewConfidence = $('review-confidence');
+  const salesforceContainer = $('salesforce-container');
+  const copySfBtn = $('copy-sf-btn');
+  const btnLoadSample = $('btn-load-sample');
 
   // ---------------------------------------------------------------- storage
   const store = {
@@ -28,9 +50,325 @@
     set(k, v) { try { localStorage.setItem('syn.' + k, v); } catch { /* private mode etc. */ } },
   };
 
+  // ---------------------------------------------------------------- Local Engine Bridge
+  const LOCAL_ENGINE_URL = 'http://127.0.0.1:8765';
+  let engineConnected = false;
+  let engineState = 'idle'; // 'idle', 'recording', 'processing', 'ready', 'error'
+  let engineSessionTimer = null;
+  let engineElapsedSeconds = 0;
+  let currentSalesforcePayload = null;
+
+  async function pollLocalEngine() {
+    try {
+      const res = await fetch(`${LOCAL_ENGINE_URL}/status`, { signal: AbortSignal.timeout(1500) });
+      if (res.ok) {
+        const data = await res.json();
+        setEngineConnectionState(true, data);
+      } else {
+        setEngineConnectionState(false);
+      }
+    } catch {
+      setEngineConnectionState(false);
+    }
+  }
+
+  function setEngineConnectionState(connected, data = null) {
+    engineConnected = connected;
+    if (connected) {
+      engineDot.className = 'h-2 w-2 rounded-full bg-emerald-500 animate-pulse';
+      engineText.textContent = 'Engine Connected';
+      engineText.className = 'font-semibold text-emerald-600 dark:text-emerald-400';
+      if (data) {
+        handleEngineStatusUpdate(data);
+      }
+    } else {
+      engineDot.className = 'h-2 w-2 rounded-full bg-amber-500';
+      engineText.textContent = 'Engine Offline';
+      engineText.className = 'text-slate-500 dark:text-slate-400';
+      if (engineState === 'recording') {
+        clearInterval(engineSessionTimer);
+        engineState = 'idle';
+        setMicButtonState('idle');
+      }
+    }
+  }
+
+  function handleEngineStatusUpdate(data) {
+    const prev = engineState;
+    engineState = data.status;
+
+    if (data.status === 'recording') {
+      engineElapsedSeconds = data.elapsed_seconds || 0;
+      setMicButtonState('recording', `Stop Call Capture (${formatDuration(engineElapsedSeconds)})`);
+      setStatus(`● Recording Call (Consultant Mic + Headset Loopback) · ${formatDuration(engineElapsedSeconds)}`, 'rec');
+    } else if (data.status === 'processing') {
+      const stageText = data.stage === 'transcription' ? 'Transcribing audio streams…' : 'Analyzing conversation…';
+      setMicButtonState('processing', `⚙️ Processing (${stageText})`);
+      setStatus(`⚙️ Processing Call: ${stageText}`, 'info');
+    } else if (data.status === 'ready' && prev === 'processing') {
+      setMicButtonState('idle', 'Start Call Capture');
+      setStatus('Call processing complete. Review generated.', 'ok');
+      fetchAndRenderEngineArtifacts();
+      switchTab('review');
+      showToast('Call analysis ready! Review before Salesforce update.');
+    } else if (data.status === 'error') {
+      setMicButtonState('idle', 'Start Call Capture');
+      setStatus(`Engine error: ${data.error || 'Unknown error'}`, 'err');
+    } else if (data.status === 'idle' && prev !== 'idle') {
+      setMicButtonState('idle', 'Start Call Capture');
+    }
+  }
+
+  function formatDuration(sec) {
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }
+
+  function setMicButtonState(stateType, label = null) {
+    micBtn.setAttribute('aria-pressed', String(stateType === 'recording'));
+    micBtn.classList.remove('bg-teal-600', 'hover:bg-teal-500', 'bg-red-600', 'hover:bg-red-500', 'bg-amber-600', 'hover:bg-amber-500');
+
+    if (stateType === 'recording') {
+      micBtn.classList.add('bg-red-600', 'hover:bg-red-500');
+      micLabel.textContent = label || 'Stop Call Capture';
+    } else if (stateType === 'processing') {
+      micBtn.classList.add('bg-amber-600', 'hover:bg-amber-500');
+      micLabel.textContent = label || 'Processing Call…';
+    } else {
+      micBtn.classList.add('bg-teal-600', 'hover:bg-teal-500');
+      micLabel.textContent = label || (engineConnected ? 'Start Call Capture' : 'Start Dictation');
+    }
+  }
+
+  async function startEngineCallCapture() {
+    try {
+      setStatus('Connecting to audio streams…');
+      const res = await fetch(`${LOCAL_ENGINE_URL}/capture/start`, { method: 'POST' });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || 'Could not start capture');
+      }
+      engineState = 'recording';
+      engineElapsedSeconds = 0;
+      clearInterval(engineSessionTimer);
+      engineSessionTimer = setInterval(() => {
+        engineElapsedSeconds++;
+        micLabel.textContent = `Stop Call Capture (${formatDuration(engineElapsedSeconds)})`;
+      }, 1000);
+      setMicButtonState('recording');
+    } catch (e) {
+      showToast(`Failed to start capture: ${e.message}`);
+      setStatus('Capture failed', 'err');
+    }
+  }
+
+  async function stopEngineCallCapture() {
+    clearInterval(engineSessionTimer);
+    setMicButtonState('processing', 'Stopping capture & transcribing…');
+    setStatus('Finalizing audio files…', 'info');
+    try {
+      const res = await fetch(`${LOCAL_ENGINE_URL}/capture/stop`, { method: 'POST' });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || 'Could not stop capture');
+      }
+      engineState = 'processing';
+      pollLocalEngine();
+    } catch (e) {
+      showToast(`Failed to stop capture: ${e.message}`);
+      setMicButtonState('idle');
+    }
+  }
+
+  async function fetchAndRenderEngineArtifacts() {
+    try {
+      // 1. Fetch transcript
+      const resTrans = await fetch(`${LOCAL_ENGINE_URL}/transcript`);
+      if (resTrans.ok) {
+        const transData = await resTrans.json();
+        renderTranscript(transData.data);
+      }
+
+      // 2. Fetch analysis & review
+      const resReview = await fetch(`${LOCAL_ENGINE_URL}/review`);
+      if (resReview.ok) {
+        const reviewData = await resReview.json();
+        renderReview(reviewData);
+      }
+
+      // 3. Fetch structured analysis JSON
+      const resAnalysis = await fetch(`${LOCAL_ENGINE_URL}/analysis`);
+      if (resAnalysis.ok) {
+        const analysisData = await resAnalysis.json();
+        if (analysisData.data && analysisData.data.confidence) {
+          reviewConfidence.textContent = `Confidence: ${analysisData.data.confidence.level} (${Math.round(analysisData.data.confidence.score * 100)}%)`;
+        }
+      }
+    } catch (e) {
+      console.warn('Error fetching artifacts:', e);
+    }
+  }
+
+  function renderTranscript(transJson) {
+    if (!transJson || !transJson.merged_turns) return;
+    const turns = transJson.merged_turns;
+    transcriptCount.textContent = `${turns.length} turns`;
+
+    let html = '';
+    turns.forEach((t) => {
+      const isConsultant = t.speaker === 'CONSULTANT';
+      const bg = isConsultant ? 'bg-teal-50 dark:bg-teal-950/40 border-teal-200 dark:border-teal-800' : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700';
+      const badge = isConsultant ? 'bg-teal-600 text-white' : 'bg-indigo-600 text-white';
+      html += `
+        <div class="rounded-xl border p-2.5 ${bg}">
+          <div class="flex items-center justify-between gap-2 mb-1">
+            <span class="rounded px-1.5 py-0.5 text-[10px] font-bold ${badge}">${t.speaker}</span>
+            <span class="text-[10px] text-slate-400 font-mono">${t.timestamp_str || ''}</span>
+          </div>
+          <p class="text-xs text-slate-800 dark:text-slate-200 leading-relaxed">${escapeHtml(t.text)}</p>
+        </div>
+      `;
+    });
+    transcriptContainer.innerHTML = html || '<p class="italic text-slate-400">Empty transcript.</p>';
+  }
+
+  function renderReview(reviewData) {
+    if (!reviewData) return;
+    
+    // Render Markdown summary nicely
+    const md = reviewData.markdown || '';
+    reviewContainer.innerHTML = formatSimpleMarkdown(md);
+
+    // Render Salesforce Draft
+    currentSalesforcePayload = reviewData.salesforce_draft;
+    if (currentSalesforcePayload && currentSalesforcePayload.fields) {
+      const f = currentSalesforcePayload.fields;
+      salesforceContainer.innerHTML = `
+        <div class="space-y-3">
+          <div class="rounded-xl border border-amber-300 bg-amber-50 p-3 dark:border-amber-700/60 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200">
+            <p class="font-bold text-xs">Human Review Boundary</p>
+            <p class="text-[11px]">This case update was automatically generated. Review and click "Copy Case Record" to paste into Salesforce.</p>
+          </div>
+          <div class="grid grid-cols-2 gap-2 text-xs">
+            <div class="p-2 rounded-lg bg-slate-100 dark:bg-slate-800">
+              <span class="text-slate-400 font-semibold block text-[10px]">CASE STATUS</span>
+              <span class="font-bold text-slate-800 dark:text-slate-200">${f.Status || 'Pending'}</span>
+            </div>
+            <div class="p-2 rounded-lg bg-slate-100 dark:bg-slate-800">
+              <span class="text-slate-400 font-semibold block text-[10px]">REMOTE CONNECTION ID</span>
+              <span class="font-bold text-slate-800 dark:text-slate-200">${f.Remote_Connection_ID__c || 'N/A'}</span>
+            </div>
+          </div>
+          <div>
+            <label class="font-bold text-xs block mb-1">Subject</label>
+            <input type="text" readonly value="${escapeHtml(f.Subject || '')}" class="w-full rounded-lg border border-slate-300 bg-slate-50 p-2 text-xs font-semibold dark:border-slate-700 dark:bg-slate-800" />
+          </div>
+          <div>
+            <label class="font-bold text-xs block mb-1">Case Description (CRM Update)</label>
+            <textarea readonly rows="8" class="w-full rounded-lg border border-slate-300 bg-slate-50 p-2 text-xs font-mono leading-relaxed dark:border-slate-700 dark:bg-slate-800">${escapeHtml(f.Description || '')}</textarea>
+          </div>
+        </div>
+      `;
+    }
+  }
+
+  function escapeHtml(str) {
+    return (str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function formatSimpleMarkdown(text) {
+    let out = escapeHtml(text);
+    // Headers
+    out = out.replace(/^# (.*?)$/gm, '<h1 class="text-base font-bold text-slate-900 dark:text-slate-100 mt-2 mb-1 border-b pb-1">$1</h1>');
+    out = out.replace(/^## (.*?)$/gm, '<h2 class="text-sm font-bold text-slate-800 dark:text-slate-200 mt-3 mb-1 text-teal-700 dark:text-teal-400">$1</h2>');
+    // Blockquotes & Alerts
+    out = out.replace(/^> \[\!(.*?)\]\n> (.*?)$/gm, '<div class="my-2 p-2 rounded-lg bg-teal-50 dark:bg-teal-950/40 border-l-4 border-teal-500 text-xs"><strong>$1:</strong> $2</div>');
+    out = out.replace(/^> (.*?)$/gm, '<blockquote class="my-2 p-2 rounded-lg bg-slate-100 dark:bg-slate-800/80 border-l-4 border-slate-400 text-xs italic">$1</blockquote>');
+    // Bold / Code
+    out = out.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    out = out.replace(/`(.*?)`/g, '<code class="px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-800 font-mono text-[11px]">$1</code>');
+    // Bullet items
+    out = out.replace(/^\- (.*?)$/gm, '<li class="ml-4 list-disc">$1</li>');
+    out = out.replace(/^\* (.*?)$/gm, '<li class="ml-4 list-disc">$1</li>');
+    // Tables
+    out = out.replace(/\|(.+)\|/g, (match) => {
+      const cells = match.split('|').filter((c) => c.trim() !== '');
+      if (cells.some((c) => c.includes('---'))) return '';
+      return `<div class="flex gap-2 text-[11px] py-1 border-b dark:border-slate-800">${cells.map((c) => `<span class="flex-1">${c.trim()}</span>`).join('')}</div>`;
+    });
+    return out.replace(/\n\n/g, '<br/>');
+  }
+
+  // ---------------------------------------------------------------- Tab Navigation
+  function switchTab(tabId) {
+    const tabs = [
+      { id: 'notes', btn: tabNotes, panel: panelNotes },
+      { id: 'transcript', btn: tabTranscript, panel: panelTranscript },
+      { id: 'review', btn: tabReview, panel: panelReview },
+      { id: 'salesforce', btn: tabSalesforce, panel: panelSalesforce },
+    ];
+
+    tabs.forEach((t) => {
+      const active = t.id === tabId;
+      t.panel.hidden = !active;
+      if (active) {
+        t.btn.className = 'flex-1 rounded-lg bg-white py-1.5 text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100 font-bold';
+      } else {
+        t.btn.className = 'flex-1 rounded-lg py-1.5 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100';
+      }
+    });
+
+    if (tagsNav) tagsNav.hidden = tabId !== 'notes';
+  }
+
+  tabNotes.addEventListener('click', () => switchTab('notes'));
+  tabTranscript.addEventListener('click', () => {
+    switchTab('transcript');
+    if (engineConnected) fetchAndRenderEngineArtifacts();
+  });
+  tabReview.addEventListener('click', () => {
+    switchTab('review');
+    if (engineConnected) fetchAndRenderEngineArtifacts();
+  });
+  tabSalesforce.addEventListener('click', () => {
+    switchTab('salesforce');
+    if (engineConnected) fetchAndRenderEngineArtifacts();
+  });
+
+  // ---------------------------------------------------------------- Demo & Copy Actions
+  btnLoadSample.addEventListener('click', async () => {
+    if (!engineConnected) {
+      showToast('Start Speak Local Engine (start_speak_engine.bat) first.');
+      return;
+    }
+    showToast('Loading real call demo sample…');
+    try {
+      const res = await fetch(`${LOCAL_ENGINE_URL}/demo/load-sample`, { method: 'POST' });
+      if (res.ok) {
+        await fetchAndRenderEngineArtifacts();
+        switchTab('review');
+        showToast('Real 9-minute call sample loaded!');
+      }
+    } catch (e) {
+      showToast(`Error loading sample: ${e.message}`);
+    }
+  });
+
+  copySfBtn.addEventListener('click', () => {
+    if (!currentSalesforcePayload || !currentSalesforcePayload.fields) {
+      showToast('No Salesforce payload to copy.');
+      return;
+    }
+    const txt = currentSalesforcePayload.fields.Description || JSON.stringify(currentSalesforcePayload, null, 2);
+    navigator.clipboard.writeText(txt).then(() => {
+      showToast('Salesforce case record copied to clipboard!');
+    }).catch(() => {
+      showToast('Copy failed.');
+    });
+  });
+
   // ---------------------------------------------------------------- quick-insert shortcuts
-  // `inline` tags insert a keyword at the caret; others insert a block template.
-  // {|} marks where the caret lands afterwards so you can dictate straight into the first field.
   const fieldsTemplate = (title, firstField) =>
     `${title}:\n- ${firstField}: {|}\n- Issue: \n- Action taken: \n- Outcome: \n`;
 
@@ -54,12 +392,6 @@
   // ---------------------------------------------------------------- text insertion
   const isCoarsePointer = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
 
-  /**
-   * Insert text at the caret (or replace the selection).
-   * opts.dictation  – smart spacing + sentence capitalisation
-   * opts.block      – make sure the text starts on its own paragraph
-   * opts.focus      – move focus into the textarea afterwards
-   */
   function insertAtCaret(raw, opts = {}) {
     let text = raw;
     const start = notes.selectionStart ?? notes.value.length;
@@ -83,7 +415,6 @@
       if (!ctx.length || /[.!?]$/.test(ctx) || /\n$/.test(ctx)) {
         text = text.replace(/^(\s*)([a-z])/, (_, ws, c) => ws + c.toUpperCase());
       }
-      // Sentence starts inside the chunk (e.g. after a spoken "full stop" / "new line").
       text = text.replace(/([.!?]\s+|\n)([a-z])/g, (_, sep, c) => sep + c.toUpperCase());
     }
 
@@ -93,14 +424,13 @@
     notes.setSelectionRange(caret, caret);
 
     if (opts.focus && !(isCoarsePointer && !opts.forceFocus)) notes.focus({ preventScroll: true });
-    // Keep the caret visible when appending at the end.
     if (caret >= notes.value.length - 1) notes.scrollTop = notes.scrollHeight;
     onNotesChanged();
   }
 
   // ---------------------------------------------------------------- notes state
   let saveTimer = null;
-  let procedureReminder = null; // set up in init; optional layer
+  let procedureReminder = null;
   function onNotesChanged() {
     updateCounter();
     clearTimeout(saveTimer);
@@ -118,77 +448,63 @@
   function setStatus(text, tone) {
     statusEl.textContent = text;
     statusEl.className = 'truncate text-xs ' + (
-      tone === 'rec' ? 'font-semibold text-red-500'
-      : tone === 'err' ? 'font-semibold text-amber-600 dark:text-amber-400'
-      : 'text-slate-500 dark:text-slate-400');
+      tone === 'err' ? 'font-semibold text-amber-600 dark:text-amber-400' :
+      tone === 'rec' ? 'font-semibold text-red-500' :
+      tone === 'ok' ? 'font-semibold text-emerald-600 dark:text-emerald-400' :
+      tone === 'info' ? 'font-semibold text-indigo-600 dark:text-indigo-400' :
+      'text-slate-500 dark:text-slate-400'
+    );
   }
   function showBanner(html) { bannerEl.innerHTML = html; bannerEl.hidden = false; }
-  function hideBanner() { bannerEl.hidden = true; bannerEl.innerHTML = ''; }
+  function hideBanner() { bannerEl.hidden = true; bannerEl.textContent = ''; }
 
   let toastTimer = null;
-  function showToast(text, actionLabel, onAction, ms = 6000) {
-    toastText.textContent = text;
-    toastAction.textContent = actionLabel || '';
-    toastAction.hidden = !actionLabel;
-    toastAction.onclick = () => { hideToast(); onAction && onAction(); };
-    toastEl.hidden = false;
+  function showToast(text, actionLabel, actionFn) {
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(hideToast, ms);
+    toastText.textContent = text;
+    if (actionLabel && actionFn) {
+      toastAction.textContent = actionLabel;
+      toastAction.hidden = false;
+      toastAction.onclick = () => { actionFn(); hideToast(); };
+    } else {
+      toastAction.hidden = true;
+      toastAction.onclick = null;
+    }
+    toastEl.hidden = false;
+    toastTimer = setTimeout(hideToast, 4000);
   }
-  function hideToast() { toastEl.hidden = true; clearTimeout(toastTimer); }
+  function hideToast() { toastEl.hidden = true; }
 
-  // ---------------------------------------------------------------- tags
+  // ---------------------------------------------------------------- render tags
   function renderTags() {
+    tagsEl.innerHTML = '';
     TAGS.forEach((tag) => {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'chip';
-      b.textContent = tag.label;
-      b.dataset.tag = tag.label;
-      // Keep the textarea caret/keyboard state intact when tapping a chip.
-      b.addEventListener('pointerdown', (e) => e.preventDefault());
-      b.addEventListener('click', () => {
-        const text = typeof tag.text === 'function' ? tag.text() : tag.text;
-        insertAtCaret(text, { block: !tag.inline, focus: true });
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn-tag shrink-0';
+      btn.textContent = tag.label;
+      btn.addEventListener('click', () => {
+        const val = typeof tag.text === 'function' ? tag.text() : tag.text;
+        insertAtCaret(val, { block: !tag.inline, focus: true });
       });
-      tagsEl.appendChild(b);
+      tagsEl.appendChild(btn);
     });
   }
 
-  // ---------------------------------------------------------------- copy / clear / tidy
+  // ---------------------------------------------------------------- action bar (notes textarea)
   async function copyText() {
-    const text = notes.value;
-    if (!text.trim()) {
-      copyBtn.classList.add('shake');
-      setTimeout(() => copyBtn.classList.remove('shake'), 600);
-      copyLabel.textContent = 'Nothing to copy';
-      setTimeout(resetCopyLabel, 1500);
-      return;
-    }
-    let ok = false;
+    const t = notes.value;
+    if (!t) { showToast('Nothing to copy.'); return; }
     try {
-      await navigator.clipboard.writeText(text);
-      ok = true;
-    } catch {
-      // Fallback for insecure contexts / older browsers.
-      const prevStart = notes.selectionStart, prevEnd = notes.selectionEnd;
-      notes.focus(); notes.select();
-      try { ok = document.execCommand('copy'); } catch { ok = false; }
-      notes.setSelectionRange(prevStart, prevEnd);
-    }
-    if (ok) {
+      await navigator.clipboard.writeText(t);
       copyLabel.textContent = 'Copied!';
-      copyBtn.classList.add('!bg-emerald-600', '!text-white');
-      clearTimeout(copyText.t);
-      copyText.t = setTimeout(resetCopyLabel, 1800);
-    } else {
-      copyLabel.textContent = 'Copy failed';
-      setTimeout(resetCopyLabel, 1800);
+      setTimeout(() => (copyLabel.textContent = 'Copy'), 1500);
+      showToast('Notes copied to clipboard.');
+    } catch {
+      notes.select();
+      document.execCommand('copy');
+      showToast('Notes copied.');
     }
-  }
-  function resetCopyLabel() {
-    copyLabel.textContent = 'Copy';
-    copyBtn.classList.remove('!bg-emerald-600', '!text-white');
   }
 
   function clearNotes() {
@@ -196,257 +512,107 @@
     if (!prev) return;
     notes.value = '';
     onNotesChanged();
-    stopInterim();
-    showToast('Notes cleared', 'Undo', () => {
+    showToast('Notes cleared.', 'Undo', () => {
       notes.value = prev;
-      notes.setSelectionRange(prev.length, prev.length);
       onNotesChanged();
     });
   }
 
-  function tidy(text) {
-    return text
-      .trim()
-      .replace(/[ \t]+/g, ' ')
-      .replace(/ ?\n ?/g, '\n')
-      .replace(/\n{3,}/g, '\n\n')
-      .replace(/ +([,.!?;:])/g, '$1')
-      .replace(/([,;])(?=[A-Za-z])/g, '$1 ')
-      .replace(/(^|[.!?]\s+|\n)((?:[-*•]\s+)?)([a-z])/g, (_, a, b, c) => a + b + c.toUpperCase())
-      .replace(/\bi\b(?=[\s',.!?]|$)/g, 'I')
-      .trim() + (text.trim() ? '\n' : '');
-  }
   function tidyNotes() {
-    const prev = notes.value;
-    const next = tidy(prev);
-    if (next === prev || !prev.trim()) { showToast('Already tidy', null, null, 1500); return; }
-    notes.value = next;
+    const raw = notes.value;
+    if (!raw.trim()) return;
+    let t = raw.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n');
+    t = t.replace(/(^|\n)([a-z])/g, (_, p, c) => p + c.toUpperCase());
+    t = t.replace(/([.!?]\s+)([a-z])/g, (_, p, c) => p + c.toUpperCase());
+    t = t.replace(/\s+([.,!?:;])/g, '$1');
+    t = t.replace(/([.,!?:;])(?=[^\s\d)\]}"'’\n])/g, '$1 ');
+    notes.value = t;
     onNotesChanged();
-    showToast('Notes tidied', 'Undo', () => { notes.value = prev; onNotesChanged(); });
+    showToast('Tidied formatting.');
   }
 
-  // ---------------------------------------------------------------- theme
-  function applyTheme(theme) {
-    document.documentElement.classList.toggle('dark', theme === 'dark');
-    const meta = $('meta-theme');
-    if (meta) meta.content = theme === 'dark' ? '#0f172a' : '#f1f5f9';
-  }
-  themeBtn.addEventListener('click', () => {
-    const next = document.documentElement.classList.contains('dark') ? 'light' : 'dark';
-    store.set('theme', next);
-    applyTheme(next);
-  });
-
-  // ---------------------------------------------------------------- dictation
+  // ---------------------------------------------------------------- speech fallback (Web Speech API)
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   let recognition = null;
-  let wantRecording = false;   // user intent
-  let state = 'idle';          // idle | starting | recording
-  let quickEnds = 0;           // consecutive sessions that ended immediately
-  let sessionStartedAt = 0;
-  let lastFinal = { text: '', at: 0 };
+  let wantRecording = false;
+  let state = 'idle';
 
-  const MIC_CLASSES_IDLE = ['bg-teal-600', 'hover:bg-teal-500'];
-  const MIC_CLASSES_REC = ['bg-red-600', 'hover:bg-red-500', 'mic-recording'];
-
-  function setMicState(next) {
-    state = next;
-    const rec = next !== 'idle';
-    micBtn.setAttribute('aria-pressed', String(rec));
-    micBtn.classList.remove(...MIC_CLASSES_IDLE, ...MIC_CLASSES_REC);
-    micBtn.classList.add(...(next === 'recording' ? MIC_CLASSES_REC : MIC_CLASSES_IDLE));
-    micBtn.dataset.state = next;
-    micLabel.textContent = next === 'idle' ? 'Start Dictation' : next === 'starting' ? 'Starting… (tap to cancel)' : 'Stop Dictation';
-    if (next === 'recording') {
-      statusEl.innerHTML = '<span class="rec-dot mr-1 inline-block h-2 w-2 rounded-full bg-red-500 align-middle"></span>Listening…';
-      statusEl.className = 'truncate text-xs font-semibold text-red-500';
-    } else if (next === 'starting') {
-      setStatus('Waiting for microphone…');
-    } else if (!bannerEl.hidden) {
-      setStatus('Dictation unavailable', 'err');
-    } else {
-      setStatus('Ready');
-    }
-  }
-
-  const VOICE_COMMANDS = [
-    [/\s*\bnew paragraph\b[.,]?\s*/gi, '\n\n'],
-    [/\s*\bnew line\b[.,]?\s*/gi, '\n'],
-    [/\s*\bfull stop\b/gi, '.'],
-    [/\s*\bquestion mark\b/gi, '?'],
-    [/\s*\bexclamation mark\b/gi, '!'],
-    [/\s*\bcomma\b/gi, ','],
-  ];
-  function applyVoiceCommands(t) {
-    let out = t;
-    for (const [re, rep] of VOICE_COMMANDS) out = out.replace(re, rep);
-    return out;
-  }
-
-  function stopInterim() { interimEl.textContent = ''; }
-
-  function permissionHelp() {
-    return '<strong>Microphone access is blocked.</strong> Tap the lock / site-settings icon in the address bar, set <em>Microphone</em> to <em>Allow</em>, then try again.';
-  }
-
-  function startDictation() {
+  function startFallbackDictation() {
     hideBanner();
     if (!SR) {
-      showBanner('<strong>Speech recognition isn\'t supported in this browser.</strong> Use Chrome, Edge or Safari (iOS 14.5+). You can still type and use the shortcut tags.');
-      setStatus('Dictation unavailable', 'err');
-      return;
-    }
-    if (!window.isSecureContext) {
-      showBanner('<strong>Microphone needs a secure connection.</strong> Open the app over <code>https://</code> or <code>http://localhost</code>.');
+      showBanner('<strong>Speech recognition isn\'t supported in this browser.</strong> Use Chrome or Edge, or start the Speak Local Engine.');
       setStatus('Dictation unavailable', 'err');
       return;
     }
     wantRecording = true;
-    quickEnds = 0;
-    beginSession();
-  }
-
-  function stopDictation() {
-    wantRecording = false;
-    if (recognition) { try { recognition.stop(); } catch { /* already stopped */ } }
-    setMicState('idle');
-    stopInterim();
-  }
-
-  function fatal(html) {
-    wantRecording = false;
-    showBanner(html);
-    setMicState('idle');
-    stopInterim();
-  }
-
-  function beginSession() {
     const r = new SR();
     recognition = r;
     r.continuous = true;
     r.interimResults = true;
-    r.maxAlternatives = 1;
     r.lang = langSel.value;
-    setMicState('starting');
-
-    r.onstart = () => {
-      if (r !== recognition) return;
-      sessionStartedAt = Date.now();
-      setMicState('recording');
-    };
+    setMicButtonState('recording');
+    setStatus('Listening…', 'rec');
 
     r.onresult = (e) => {
-      if (r !== recognition) return;
-      quickEnds = 0;
       let interim = '';
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const res = e.results[i];
-        const t = res[0].transcript;
-        if (res.isFinal) {
-          const chunk = applyVoiceCommands(t.trim());
-          const now = Date.now();
-          // Some Android builds re-emit the same final phrase; drop immediate duplicates.
-          if (!chunk || (chunk === lastFinal.text && now - lastFinal.at < 1200)) continue;
-          lastFinal = { text: chunk, at: now };
-          insertAtCaret(chunk, { dictation: true });
-        } else {
-          interim += t;
-        }
+        if (res.isFinal) insertAtCaret(res[0].transcript.trim(), { dictation: true });
+        else interim += res[0].transcript;
       }
       interimEl.textContent = interim ? '… ' + interim.trim() : '';
     };
 
     r.onerror = (e) => {
-      if (r !== recognition) return;
-      switch (e.error) {
-        case 'not-allowed':
-        case 'service-not-allowed':
-          fatal(permissionHelp());
-          break;
-        case 'audio-capture':
-          fatal('<strong>No microphone found.</strong> Check that a microphone is connected and not in use by another app.');
-          break;
-        case 'network':
-          fatal('<strong>Speech service unreachable.</strong> Dictation needs an internet connection in this browser.');
-          break;
-        case 'language-not-supported':
-          fatal('<strong>That language isn\'t supported</strong> by this browser. Try EN-US or EN-GB.');
-          break;
-        case 'no-speech':
-        case 'aborted':
-        default:
-          break; // onend will restart if the user still wants to record
-      }
+      setStatus(`Dictation error: ${e.error}`, 'err');
     };
 
     r.onend = () => {
-      if (r !== recognition) return;
-      stopInterim();
-      if (!wantRecording) { setMicState('idle'); return; }
-      // Browsers end continuous sessions after silence – transparently resume.
-      if (Date.now() - sessionStartedAt < 1000) quickEnds++;
-      if (quickEnds > 3) {
-        fatal('<strong>Dictation keeps stopping.</strong> Check your microphone and connection, then tap Start Dictation again.');
-        return;
-      }
-      setTimeout(() => { if (wantRecording && r === recognition) beginSession(); }, 150);
+      interimEl.textContent = '';
+      if (!wantRecording) setMicButtonState('idle');
     };
 
-    try {
-      r.start();
-    } catch (err) {
-      fatal('<strong>Couldn\'t start dictation.</strong> ' + (err && err.message ? err.message : 'Please try again.'));
-    }
+    try { r.start(); } catch (err) { setStatus('Could not start microphone', 'err'); }
   }
 
+  function stopFallbackDictation() {
+    wantRecording = false;
+    if (recognition) { try { recognition.stop(); } catch {} }
+    setMicButtonState('idle');
+    setStatus('Ready');
+  }
+
+  // ---------------------------------------------------------------- Main Click: Start/Stop Call
   micBtn.addEventListener('click', () => {
-    if (state === 'idle') startDictation(); else stopDictation();
-  });
-
-  // Reflect the browser's microphone permission (where the Permissions API supports it).
-  async function watchMicPermission() {
-    if (!navigator.permissions || !navigator.permissions.query) return;
-    try {
-      const p = await navigator.permissions.query({ name: 'microphone' });
-      const apply = () => {
-        if (p.state === 'denied') {
-          showBanner(permissionHelp());
-          if (state === 'idle') setStatus('Microphone blocked', 'err');
-        } else if (!wantRecording && !bannerEl.hidden && bannerEl.textContent.includes('blocked')) {
-          hideBanner();
-          if (state === 'idle') setStatus('Ready');
-        }
-      };
-      p.onchange = apply;
-      apply();
-    } catch { /* 'microphone' not queryable (e.g. Safari) – fine */ }
-  }
-
-  // ---------------------------------------------------------------- shortcuts & lifecycle
-  document.addEventListener('keydown', (e) => {
-    // Ctrl/Cmd + Shift + Space toggles dictation; Ctrl/Cmd + Shift + C copies.
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.code === 'Space') { e.preventDefault(); micBtn.click(); }
-    else if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.code === 'KeyC') { e.preventDefault(); copyText(); }
-  });
-  document.addEventListener('visibilitychange', () => { if (document.hidden && wantRecording) stopDictation(); });
-
-  langSel.addEventListener('change', () => {
-    store.set('lang', langSel.value);
-    if (wantRecording) { // restart with the new language
-      const old = recognition; recognition = null;
-      try { old && old.abort(); } catch { /* noop */ }
-      beginSession();
+    if (engineConnected) {
+      if (engineState === 'recording') {
+        stopEngineCallCapture();
+      } else if (engineState === 'idle' || engineState === 'ready' || engineState === 'error') {
+        startEngineCallCapture();
+      }
+    } else {
+      // Fallback to browser dictation
+      if (state === 'idle' && !wantRecording) {
+        startFallbackDictation();
+      } else {
+        stopFallbackDictation();
+      }
     }
   });
-
-  copyBtn.addEventListener('click', copyText);
-  clearBtn.addEventListener('click', clearNotes);
-  tidyBtn.addEventListener('click', tidyNotes);
 
   // ---------------------------------------------------------------- init
-  // Procedure Hub awareness layer. The service is the only source of procedures: to move from demo data to
-  // the real Procedure Hub, provide an object with findRelevantProcedures()/getProcedure() as
-  // window.SYN_PROCEDURE_SERVICE (see procedures/procedureService.js for the contract).
+  renderTags();
+  notes.value = store.get('notes', '');
+  notes.setSelectionRange(notes.value.length, notes.value.length);
+  langSel.value = store.get('lang', 'en-ZA');
+  updateCounter();
+  setMicButtonState('idle');
+
+  // Start polling Local Engine on loopback
+  pollLocalEngine();
+  setInterval(pollLocalEngine, 2000);
+
+  // Procedure Hub
   (function initProcedureLayer() {
     const PH = window.ProcedureHub;
     if (!PH || !PH.createReminderController) return;
@@ -469,19 +635,6 @@
       },
     });
   })();
-
-  renderTags();
-  notes.value = store.get('notes', '');
-  notes.setSelectionRange(notes.value.length, notes.value.length);
-  langSel.value = store.get('lang', 'en-ZA');
-  if (langSel.value !== store.get('lang', 'en-ZA')) langSel.value = 'en-ZA';
-  updateCounter();
-  setMicState('idle');
-  if (!SR) {
-    showBanner('<strong>Speech recognition isn\'t supported in this browser.</strong> Use Chrome, Edge or Safari. You can still type and use the shortcut tags.');
-    setStatus('Dictation unavailable', 'err');
-  }
-  watchMicPermission();
 
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
     window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));

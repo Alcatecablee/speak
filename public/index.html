@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Speak Your Notes</title>
+  <meta name="description" content="Fast voice-to-text dictation notepad for support notes." />
+  <meta name="theme-color" content="#0f172a" id="meta-theme" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" type="image/svg+xml" href="icons/icon.svg" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Speak Notes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <script>
+    // Apply saved theme before first paint (avoids a light/dark flash).
+    (function () {
+      try {
+        var t = localStorage.getItem('syn.theme');
+        if (!t) t = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+        if (t === 'dark') document.documentElement.classList.add('dark');
+      } catch (e) { document.documentElement.classList.add('dark'); }
+    })();
+  </script>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="h-full bg-slate-100 font-sans text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100">
+  <div class="mx-auto flex h-full max-w-3xl flex-col" style="height:100dvh">
+
+    <!-- Header -->
+    <header class="flex items-center justify-between gap-3 px-4 pb-2 pt-[max(0.75rem,env(safe-area-inset-top))]">
+      <div class="flex min-w-0 items-center gap-3">
+        <div class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-teal-600 text-white shadow">
+          <svg viewBox="0 0 24 24" class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4"/></svg>
+        </div>
+        <div class="min-w-0">
+          <h1 class="truncate text-lg font-bold leading-tight">Speak Your Notes</h1>
+          <p class="truncate text-xs text-slate-500 dark:text-slate-400">Speak it. Structure it. Copy it.</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <!-- Local Engine connection status badge -->
+        <div id="engine-status" class="flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+          <span id="engine-dot" class="h-2 w-2 rounded-full bg-amber-500"></span>
+          <span id="engine-text">Engine Offline</span>
+        </div>
+        <label class="sr-only" for="lang">Dictation language</label>
+        <select id="lang" class="h-10 rounded-lg border border-slate-300 bg-white px-2 text-xs font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+          <option value="en-ZA">EN-ZA</option>
+          <option value="en-GB">EN-GB</option>
+          <option value="en-US">EN-US</option>
+        </select>
+        <button id="theme-toggle" type="button" aria-label="Toggle dark / light theme" class="grid h-10 w-10 place-items-center rounded-lg border border-slate-300 bg-white text-slate-700 transition hover:border-teal-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+          <svg id="icon-sun" class="hidden h-5 w-5 dark:block" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+          <svg id="icon-moon" class="h-5 w-5 dark:hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <div class="px-4 pb-2">
+      <div class="flex gap-1 rounded-xl bg-slate-200/80 p-1 text-xs font-semibold dark:bg-slate-800/80">
+        <button id="tab-notes" type="button" class="flex-1 rounded-lg bg-white py-1.5 text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100">Call Capture</button>
+        <button id="tab-transcript" type="button" class="flex-1 rounded-lg py-1.5 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100">Transcript</button>
+        <button id="tab-review" type="button" class="flex-1 rounded-lg py-1.5 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100">AI Intelligence</button>
+        <button id="tab-salesforce" type="button" class="flex-1 rounded-lg py-1.5 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100">Salesforce Draft</button>
+      </div>
+    </div>
+
+    <!-- Alert banner (unsupported browser / mic blocked / engine offline) -->
+    <div id="banner" hidden role="alert" class="mx-4 mb-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-700/60 dark:bg-amber-950/60 dark:text-amber-200"></div>
+
+    <!-- Quick-insert tags -->
+    <nav id="tags-nav" aria-label="Quick insert shortcuts" class="px-4 pb-2">
+      <div id="tags" class="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 pb-1"></div>
+    </nav>
+
+    <!-- Main Content Panels -->
+    <main class="flex min-h-0 flex-1 flex-col px-4">
+      
+      <!-- Panel 1: Notes / Live Textarea -->
+      <section id="panel-notes" class="flex min-h-0 flex-1 flex-col">
+        <label for="notes" class="sr-only">Notes</label>
+        <textarea id="notes" spellcheck="true" autocapitalize="sentences" placeholder="Click 'Start Call Capture' to record both sides of the call, or dictation..."
+          class="min-h-0 w-full flex-1 resize-none rounded-2xl border border-slate-300 bg-white p-4 text-base leading-relaxed shadow-sm placeholder:text-slate-400 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/40 dark:border-slate-700 dark:bg-slate-900 dark:placeholder:text-slate-500"></textarea>
+      </section>
+
+      <!-- Panel 2: Speaker-Separated Transcript -->
+      <section id="panel-transcript" hidden class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+        <div class="mb-2 flex items-center justify-between border-b pb-2 dark:border-slate-800">
+          <h2 class="text-sm font-bold text-slate-800 dark:text-slate-200">Two-Stream Dialogue Transcript</h2>
+          <span id="transcript-count" class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-400">0 turns</span>
+        </div>
+        <div id="transcript-container" class="flex-1 space-y-2 overflow-y-auto pr-1 text-xs">
+          <p class="italic text-slate-400">No transcript available. Record a call or load sample.</p>
+        </div>
+      </section>
+
+      <!-- Panel 3: AI Review & Intelligence -->
+      <section id="panel-review" hidden class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+        <div class="mb-2 flex items-center justify-between border-b pb-2 dark:border-slate-800">
+          <h2 class="text-sm font-bold text-slate-800 dark:text-slate-200">AI Conversation Intelligence</h2>
+          <span id="review-confidence" class="rounded-full bg-teal-100 px-2 py-0.5 text-xs font-semibold text-teal-800 dark:bg-teal-900/50 dark:text-teal-300">Confidence: N/A</span>
+        </div>
+        <div id="review-container" class="flex-1 space-y-3 overflow-y-auto pr-1 text-xs leading-relaxed text-slate-700 dark:text-slate-300">
+          <p class="italic text-slate-400">No analysis available. Record a call or load sample.</p>
+        </div>
+      </section>
+
+      <!-- Panel 4: Salesforce Draft Case -->
+      <section id="panel-salesforce" hidden class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+        <div class="mb-2 flex items-center justify-between border-b pb-2 dark:border-slate-800">
+          <div>
+            <h2 class="text-sm font-bold text-slate-800 dark:text-slate-200">Salesforce Case Record Draft</h2>
+            <p class="text-[11px] text-amber-600 dark:text-amber-400 font-semibold">DRAFT - HUMAN REVIEW REQUIRED BEFORE SUBMISSION</p>
+          </div>
+          <button id="copy-sf-btn" type="button" class="rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-teal-500 shadow">
+            Copy Case Record
+          </button>
+        </div>
+        <div id="salesforce-container" class="flex-1 space-y-2 overflow-y-auto pr-1 text-xs text-slate-700 dark:text-slate-300">
+          <p class="italic text-slate-400">No draft payload available.</p>
+        </div>
+      </section>
+
+      <!-- Procedure Hub reminders -->
+      <section id="ph-cards" hidden aria-live="polite" aria-label="Procedure Hub reminders" class="mt-2 flex max-h-36 flex-col gap-2 overflow-y-auto"></section>
+
+      <!-- Status footer -->
+      <div class="flex items-start justify-between gap-3 px-1 pt-2 text-xs text-slate-500 dark:text-slate-400">
+        <div class="min-w-0 flex-1">
+          <p id="status" role="status" aria-live="polite" class="truncate text-xs text-slate-500 dark:text-slate-400">Ready</p>
+          <p id="interim" aria-live="off" class="min-h-[1rem] truncate italic"></p>
+        </div>
+        <div class="flex shrink-0 items-center gap-3">
+          <button id="ph-tray" type="button" hidden class="rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-indigo-700 underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 dark:text-indigo-300"></button>
+          <p id="counter" class="tabular-nums">0 words · 0 chars</p>
+        </div>
+      </div>
+    </main>
+
+    <!-- Action bar -->
+    <footer class="px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2">
+      <!-- Main Call / Dictation Toggle Button -->
+      <button id="mic" type="button" aria-pressed="false"
+        class="btn w-full bg-teal-600 text-base text-white shadow-lg hover:bg-teal-500 transition" style="min-height:60px">
+        <svg id="mic-icon" viewBox="0 0 24 24" class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4"/></svg>
+        <span id="mic-label">Start Call Capture</span>
+      </button>
+
+      <div class="mt-2 grid grid-cols-4 gap-2 text-xs">
+        <button id="copy" type="button" class="btn bg-slate-900 text-white hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white py-2">
+          <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+          <span id="copy-label">Copy</span>
+        </button>
+        <button id="tidy" type="button" class="btn btn-secondary py-2" title="Fix spacing and capitalise sentences">
+          <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 4.6L18.5 9l-4.6 1.4L12 15l-1.9-4.6L5.5 9l4.6-1.4zM19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg>
+          <span>Tidy</span>
+        </button>
+        <button id="clear" type="button" class="btn btn-secondary py-2 hover:!bg-red-100 hover:!text-red-700 dark:hover:!bg-red-950 dark:hover:!text-red-300">
+          <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v6M14 11v6"/></svg>
+          <span>Clear</span>
+        </button>
+        <button id="btn-load-sample" type="button" class="btn bg-indigo-600 text-white hover:bg-indigo-500 py-2" title="Load real 9-min call demo sample">
+          <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+          <span>Demo Call</span>
+        </button>
+    </footer>
+  </div>
+
+  <!-- Toast (undo etc.) -->
+  <div id="toast" hidden class="fixed inset-x-0 bottom-28 z-50 mx-auto flex w-max max-w-[90vw] items-center gap-3 rounded-xl bg-slate-900 px-4 py-3 text-sm text-white shadow-xl dark:bg-slate-100 dark:text-slate-900">
+    <span id="toast-text"></span>
+    <button id="toast-action" type="button" class="font-bold text-teal-300 underline-offset-2 hover:underline dark:text-teal-700"></button>
+  </div>
+
+  <!-- Procedure panel (read-only; opening it never touches dictation) -->
+  <div id="ph-modal" hidden class="fixed inset-0 z-[60] flex items-end justify-center bg-slate-900/60 p-0 sm:items-center sm:p-4">
+    <div role="dialog" aria-modal="true" aria-labelledby="ph-m-title" class="max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-white p-5 shadow-2xl dark:bg-slate-900 sm:rounded-2xl">
+      <p class="text-[11px] font-semibold uppercase tracking-wide text-indigo-700 dark:text-indigo-300">Procedure Hub</p>
+      <h2 id="ph-m-title" class="mt-1 text-xl font-bold"></h2>
+      <div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
+        <span id="ph-m-status" class="rounded-full bg-emerald-100 px-2.5 py-1 font-semibold text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200"></span>
+        <span id="ph-m-version" class="rounded-full bg-slate-100 px-2.5 py-1 font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200"></span>
+      </div>
+      <blockquote id="ph-m-instruction" class="mt-4 rounded-xl border-l-4 border-indigo-500 bg-indigo-50 p-4 text-base leading-relaxed dark:bg-indigo-950/40"></blockquote>
+      <dl class="mt-4 grid grid-cols-[auto,1fr] gap-x-4 gap-y-1.5 text-sm">
+        <dt class="text-slate-500 dark:text-slate-400">Effective</dt><dd id="ph-m-effective" class="font-medium"></dd>
+        <dt class="text-slate-500 dark:text-slate-400">Source</dt><dd id="ph-m-source" class="font-medium"></dd>
+        <dt class="text-slate-500 dark:text-slate-400">Last updated</dt><dd id="ph-m-updated" class="font-medium"></dd>
+      </dl>
+      <p id="ph-m-demo" hidden class="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950/50 dark:text-amber-200">Development demo data only – not an official procedure and not connected to a live Procedure Hub.</p>
+      <p class="mt-3 text-xs text-slate-500 dark:text-slate-400">This is a reminder only. Nothing is added to your note – you decide whether it applies.</p>
+      <button id="ph-m-close" type="button" class="btn mt-4 w-full bg-slate-900 text-white hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white">Close</button>
+    </div>
+  </div>
+
+  <script src="procedures/relevance.js"></script>
+  <script src="procedures/demoProcedures.js"></script>
+  <script src="procedures/procedureService.js"></script>
+  <script src="procedures/reminderTracker.js"></script>
+  <script src="procedures/procedureReminder.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
