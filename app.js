@@ -44,6 +44,17 @@
   const copySfBtn = $('copy-sf-btn');
   const btnLoadSample = $('btn-load-sample');
 
+  // Processing Stepper elements
+  const processingCard = $('processing-card');
+  const processingTitle = $('processing-title');
+  const processingSubtitle = $('processing-subtitle');
+  const processingTimer = $('processing-timer');
+  const processingStepper = $('processing-stepper');
+  const processingActions = $('processing-actions');
+  const btnViewTranscript = $('btn-view-transcript');
+  const btnViewReview = $('btn-view-review');
+  const btnViewSf = $('btn-view-sf');
+
   // ---------------------------------------------------------------- storage
   const store = {
     get(k, d) { try { const v = localStorage.getItem('syn.' + k); return v === null ? d : v; } catch { return d; } },
@@ -57,6 +68,15 @@
   let engineSessionTimer = null;
   let engineElapsedSeconds = 0;
   let currentSalesforcePayload = null;
+
+  const PIPELINE_STAGES = [
+    { key: 'stopping', label: 'Audio Capture Finalization', desc: 'Flushing WAV audio streams to disk' },
+    { key: 'transcribing_consultant', label: 'Consultant Audio Transcription (Mic)', desc: 'Whisper is processing consultant microphone on CPU' },
+    { key: 'transcribing_client', label: 'Client Audio Transcription (Loopback)', desc: 'Whisper is processing client audio on CPU. This may take a moment' },
+    { key: 'merging_transcript', label: 'Speaker Transcript Merge', desc: 'Aligning timestamps and merging speaker dialogue turns' },
+    { key: 'analysing', label: 'Conversation Intelligence Analysis', desc: 'Extracting verified facts, commitments, and sentiment' },
+    { key: 'preparing_review', label: 'Salesforce Case Record Draft', desc: 'Formatting reviewable CRM case record' }
+  ];
 
   async function pollLocalEngine() {
     if (typeof window.__instances === 'function' || typeof window.__emit === 'function') {
@@ -96,28 +116,132 @@
     }
   }
 
+  function renderProcessingStepper(data) {
+    if (!processingCard || !processingStepper) return;
+
+    processingCard.hidden = false;
+    panelNotes.hidden = true;
+    panelTranscript.hidden = true;
+    panelReview.hidden = true;
+    panelSalesforce.hidden = true;
+
+    const currentStage = data.stage || 'stopping';
+    const completed = data.completed_stages || [];
+    const isReady = data.status === 'ready';
+    const isError = data.status === 'error';
+
+    if (isReady) {
+      processingTitle.textContent = 'PROCESSING COMPLETE';
+      processingTitle.className = 'text-xs font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400';
+      processingSubtitle.textContent = 'All audio transcribed and case intelligence generated successfully.';
+      processingTimer.textContent = `Completed (${formatDuration(data.elapsed_seconds || 0)})`;
+      if (processingActions) processingActions.hidden = false;
+    } else if (isError) {
+      processingTitle.textContent = 'PROCESSING FAILED';
+      processingTitle.className = 'text-xs font-bold uppercase tracking-wider text-red-700 dark:text-red-400';
+      processingSubtitle.textContent = data.error || 'Pipeline encountered an unexpected error.';
+      processingTimer.textContent = 'Failed';
+      if (processingActions) processingActions.hidden = true;
+    } else {
+      processingTitle.textContent = 'PROCESSING CALL';
+      processingTitle.className = 'text-xs font-bold uppercase tracking-wider text-teal-700 dark:text-teal-400';
+      processingSubtitle.textContent = data.message || 'Dual-stream capture finalized · Running local pipeline on CPU';
+      processingTimer.textContent = `Elapsed: ${formatDuration(data.elapsed_seconds || 0)}`;
+      if (processingActions) processingActions.hidden = true;
+    }
+
+    let html = '';
+    PIPELINE_STAGES.forEach((stage, idx) => {
+      const isCompleted = isReady || completed.includes(stage.key);
+      const isActive = !isReady && !isError && currentStage === stage.key;
+      const isFailed = isError && currentStage === stage.key;
+
+      let iconHtml = '';
+      let itemStyle = '';
+      let textStyle = '';
+      let subtext = '';
+
+      if (isCompleted) {
+        iconHtml = `<span class="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 font-bold text-xs">✓</span>`;
+        itemStyle = 'border-emerald-200 bg-emerald-50/50 dark:border-emerald-900/40 dark:bg-emerald-950/20';
+        textStyle = 'text-emerald-900 dark:text-emerald-200 font-medium';
+        subtext = '<span class="text-[11px] text-emerald-700 dark:text-emerald-400">Complete</span>';
+      } else if (isActive) {
+        iconHtml = `<span class="flex h-5 w-5 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300 font-bold text-xs animate-pulse">●</span>`;
+        itemStyle = 'border-amber-300 bg-amber-50/80 dark:border-amber-700/60 dark:bg-amber-950/40 ring-1 ring-amber-400/50';
+        textStyle = 'text-amber-950 dark:text-amber-100 font-bold';
+        subtext = `<span class="text-[11px] text-amber-800 dark:text-amber-300 block font-normal mt-0.5">${escapeHtml(data.message || stage.desc)}</span>`;
+      } else if (isFailed) {
+        iconHtml = `<span class="flex h-5 w-5 items-center justify-center rounded-full bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300 font-bold text-xs">✕</span>`;
+        itemStyle = 'border-red-300 bg-red-50/80 dark:border-red-800 dark:bg-red-950/40';
+        textStyle = 'text-red-900 dark:text-red-200 font-bold';
+        subtext = `<span class="text-[11px] text-red-700 dark:text-red-400 block font-normal mt-0.5">${escapeHtml(data.error || 'Failed')}</span>`;
+      } else {
+        iconHtml = `<span class="flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500 text-xs">○</span>`;
+        itemStyle = 'border-slate-200 bg-white dark:border-slate-800/80 dark:bg-slate-900/40 opacity-70';
+        textStyle = 'text-slate-600 dark:text-slate-400 font-normal';
+        subtext = `<span class="text-[11px] text-slate-400 dark:text-slate-500 block">${stage.desc}</span>`;
+      }
+
+      html += `
+        <div class="flex items-start gap-3 rounded-xl border p-2.5 transition ${itemStyle}">
+          <div class="shrink-0 mt-0.5">${iconHtml}</div>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center justify-between">
+              <span class="text-xs ${textStyle}">${idx + 1}. ${stage.label}</span>
+            </div>
+            ${subtext}
+          </div>
+        </div>
+      `;
+    });
+
+    if (isError) {
+      html += `
+        <div class="mt-3 flex justify-end">
+          <button id="btn-dismiss-error" type="button" class="btn btn-sm bg-slate-800 text-white hover:bg-slate-700 dark:bg-slate-700">Dismiss</button>
+        </div>
+      `;
+    }
+
+    processingStepper.innerHTML = html;
+
+    const dismissBtn = $('btn-dismiss-error');
+    if (dismissBtn) {
+      dismissBtn.onclick = () => {
+        if (processingCard) processingCard.hidden = true;
+        switchTab('notes');
+        setMicButtonState('idle');
+      };
+    }
+  }
+
   function handleEngineStatusUpdate(data) {
     const prev = engineState;
     engineState = data.status;
 
     if (data.status === 'recording') {
+      if (processingCard) processingCard.hidden = true;
       engineElapsedSeconds = data.elapsed_seconds || 0;
       setMicButtonState('recording', `Stop Call Capture (${formatDuration(engineElapsedSeconds)})`);
       setStatus(`● Recording Call (Consultant Mic + Headset Loopback) · ${formatDuration(engineElapsedSeconds)}`, 'rec');
     } else if (data.status === 'processing') {
-      const stageText = data.stage === 'transcription' ? 'Transcribing audio streams…' : 'Analyzing conversation…';
-      setMicButtonState('processing', `⚙️ Processing (${stageText})`);
-      setStatus(`⚙️ Processing Call: ${stageText}`, 'info');
+      renderProcessingStepper(data);
+      const stageName = data.stage_label || data.stage || 'Transcribing';
+      setMicButtonState('processing', `⚙️ Processing (${stageName})`);
+      setStatus(`⚙️ Processing Call: ${stageName} · ${formatDuration(data.elapsed_seconds || 0)}`, 'info');
     } else if (data.status === 'ready' && prev === 'processing') {
+      renderProcessingStepper(data);
       setMicButtonState('idle', 'Start Call Capture');
       setStatus('Call processing complete. Review generated.', 'ok');
       fetchAndRenderEngineArtifacts();
-      switchTab('review');
       showToast('Call analysis ready! Review before Salesforce update.');
     } else if (data.status === 'error') {
+      renderProcessingStepper(data);
       setMicButtonState('idle', 'Start Call Capture');
       setStatus(`Engine error: ${data.error || 'Unknown error'}`, 'err');
     } else if (data.status === 'idle' && prev !== 'idle') {
+      if (processingCard) processingCard.hidden = true;
       setMicButtonState('idle', 'Start Call Capture');
     }
   }
@@ -132,18 +256,22 @@
     state = stateType;
     micBtn.setAttribute('data-state', stateType === 'recording' ? 'recording' : 'idle');
     micBtn.setAttribute('aria-pressed', String(stateType === 'recording'));
-    micBtn.classList.remove('bg-teal-600', 'hover:bg-teal-500', 'bg-red-600', 'hover:bg-red-500', 'bg-amber-600', 'hover:bg-amber-500', 'mic-recording');
+    micBtn.classList.remove('bg-teal-600', 'hover:bg-teal-500', 'bg-red-600', 'hover:bg-red-500', 'bg-amber-600', 'hover:bg-amber-500', 'mic-recording', 'opacity-75', 'cursor-not-allowed');
 
     if (stateType === 'recording') {
+      micBtn.disabled = false;
       micBtn.classList.add('bg-red-600', 'hover:bg-red-500', 'mic-recording');
       micLabel.textContent = label || (engineConnected ? 'Stop Call Capture' : 'Stop Dictation');
     } else if (stateType === 'processing') {
-      micBtn.classList.add('bg-amber-600', 'hover:bg-amber-500');
+      micBtn.disabled = true;
+      micBtn.classList.add('bg-amber-600', 'hover:bg-amber-500', 'opacity-75', 'cursor-not-allowed');
       micLabel.textContent = label || 'Processing Call…';
     } else if (stateType === 'starting') {
+      micBtn.disabled = false;
       micBtn.classList.add('bg-amber-600', 'hover:bg-amber-500');
       micLabel.textContent = label || 'Starting…';
     } else {
+      micBtn.disabled = false;
       micBtn.classList.add('bg-teal-600', 'hover:bg-teal-500');
       micLabel.textContent = label || (engineConnected ? 'Start Call Capture' : 'Start Dictation');
     }
@@ -324,6 +452,8 @@
 
   // ---------------------------------------------------------------- Tab Navigation
   function switchTab(tabId) {
+    if (processingCard) processingCard.hidden = true;
+
     const tabs = [
       { id: 'notes', btn: tabNotes, panel: panelNotes },
       { id: 'transcript', btn: tabTranscript, panel: panelTranscript },
@@ -353,6 +483,25 @@
     switchTab('salesforce');
     if (engineConnected) fetchAndRenderEngineArtifacts();
   });
+
+  if (btnViewTranscript) {
+    btnViewTranscript.addEventListener('click', () => {
+      switchTab('transcript');
+      fetchAndRenderEngineArtifacts();
+    });
+  }
+  if (btnViewReview) {
+    btnViewReview.addEventListener('click', () => {
+      switchTab('review');
+      fetchAndRenderEngineArtifacts();
+    });
+  }
+  if (btnViewSf) {
+    btnViewSf.addEventListener('click', () => {
+      switchTab('salesforce');
+      fetchAndRenderEngineArtifacts();
+    });
+  }
 
   // ---------------------------------------------------------------- Demo & Copy Actions
   btnLoadSample.addEventListener('click', async () => {

@@ -282,9 +282,10 @@ class TestHardenedIntelligence(unittest.TestCase):
 
     # TEST 19: End-to-End Real Transcript Integration
     def test_19_real_transcript_pipeline(self):
-        real_transcript_path = Path("recordings/transcript.json")
+        sample_path = Path("recordings/demo_sample_transcript.json")
+        real_transcript_path = sample_path if sample_path.exists() else Path("recordings/transcript.json")
         if not real_transcript_path.exists():
-            self.skipTest("recordings/transcript.json not present on disk")
+            self.skipTest("Transcript benchmark fixture not present on disk")
 
         analyzer = ConversationAnalyzer(provider=self.provider)
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -129,6 +129,27 @@
         </div>
       </section>
 
+      <!-- Processing Progress & Observability Overlay / Card -->
+      <section id="processing-card" hidden class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-teal-500/30 bg-slate-50 p-5 shadow-md dark:border-teal-500/20 dark:bg-slate-900/90">
+        <div class="mb-4 flex items-center justify-between border-b pb-3 dark:border-slate-800">
+          <div>
+            <h2 id="processing-title" class="text-xs font-bold uppercase tracking-wider text-teal-700 dark:text-teal-400">Processing Call</h2>
+            <p id="processing-subtitle" class="text-xs text-slate-600 dark:text-slate-300">Dual-stream capture finalized · Running local pipeline on CPU</p>
+          </div>
+          <span id="processing-timer" class="rounded-full bg-slate-200 px-3 py-1 font-mono text-xs font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-200">Elapsed: 00:00</span>
+        </div>
+        
+        <div id="processing-stepper" class="flex-1 space-y-3 overflow-y-auto pr-1 text-xs">
+          <!-- Populated dynamically by app.js -->
+        </div>
+
+        <div id="processing-actions" hidden class="mt-4 flex flex-wrap gap-2 border-t pt-3 dark:border-slate-800">
+          <button id="btn-view-transcript" type="button" class="btn btn-sm bg-slate-800 text-white hover:bg-slate-700 dark:bg-slate-700 dark:hover:bg-slate-600">View Dialogue</button>
+          <button id="btn-view-review" type="button" class="btn btn-sm bg-teal-600 text-white hover:bg-teal-500">View AI Summary</button>
+          <button id="btn-view-sf" type="button" class="btn btn-sm bg-indigo-600 text-white hover:bg-indigo-500">View Salesforce Draft</button>
+        </div>
+      </section>
+
       <!-- Procedure Hub reminders -->
       <section id="ph-cards" hidden aria-live="polite" aria-label="Procedure Hub reminders" class="mt-2 flex max-h-32 flex-col gap-2 overflow-y-auto"></section>
 

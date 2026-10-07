@@ -26,7 +26,8 @@ class TranscriptionPipeline:
         consultant_audio_path: str,
         client_audio_path: str,
         call_start_time: Optional[datetime] = None,
-        output_dir: Optional[str] = None
+        output_dir: Optional[str] = None,
+        stage_callback: Optional[Any] = None
     ) -> Dict[str, Any]:
         """
         Process both audio streams, merge them, and output transcripts.
@@ -43,6 +44,8 @@ class TranscriptionPipeline:
         errors = {}
         
         # 1. Transcribe Consultant Stream
+        if stage_callback:
+            stage_callback("transcribing_consultant", "Transcribing consultant audio", "Whisper is processing consultant microphone locally on CPU...")
         logger.info("[STREAM 1/2] Beginning transcription of CONSULTANT stream...")
         try:
             consultant_segments = self.provider.transcribe(consultant_audio_path, speaker_label="CONSULTANT")
@@ -52,6 +55,8 @@ class TranscriptionPipeline:
             errors["consultant_error"] = str(e)
             
         # 2. Transcribe Client Stream
+        if stage_callback:
+            stage_callback("transcribing_client", "Transcribing client audio", "Whisper is processing client audio locally on CPU. This may take a moment...")
         logger.info("[STREAM 2/2] Beginning transcription of CLIENT stream...")
         try:
             client_segments = self.provider.transcribe(client_audio_path, speaker_label="CLIENT")
@@ -61,6 +66,8 @@ class TranscriptionPipeline:
             errors["client_error"] = str(e)
             
         # 3. Merge streams chronologically
+        if stage_callback:
+            stage_callback("merging_transcript", "Merging speaker transcript", "Aligning timestamps and merging speaker dialogue turns...")
         logger.info("[MERGE] Merging speaker streams by timestamp...")
         merged_turns = merge_speaker_streams(
             consultant_segments=consultant_segments,

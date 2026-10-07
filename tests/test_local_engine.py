@@ -28,7 +28,42 @@ class TestLocalEngineAPI(unittest.TestCase):
         data = response.json()
         self.assertIn("status", data)
         self.assertIn("stage", data)
+        self.assertIn("stage_label", data)
+        self.assertIn("message", data)
+        self.assertIn("elapsed_seconds", data)
+        self.assertIn("completed_stages", data)
         self.assertIn("has_transcript", data)
+
+    def test_stage_tracking_state_machine(self):
+        # Verify SessionManager._update_stage records completed stages
+        session_manager.state = "processing"
+        session_manager.completed_stages = []
+        session_manager._update_stage("stopping", "Finalizing audio capture", "Flushing buffers")
+        self.assertEqual(session_manager.stage, "stopping")
+        self.assertEqual(session_manager.stage_label, "Finalizing audio capture")
+
+        session_manager._update_stage("transcribing_consultant", "Transcribing consultant audio", "Processing mic")
+        self.assertEqual(session_manager.stage, "transcribing_consultant")
+        self.assertIn("stopping", session_manager.completed_stages)
+
+        session_manager._update_stage("transcribing_client", "Transcribing client audio", "Processing loopback")
+        self.assertEqual(session_manager.stage, "transcribing_client")
+        self.assertIn("transcribing_consultant", session_manager.completed_stages)
+
+        session_manager._update_stage("merging_transcript", "Merging speaker transcript", "Merging turns")
+        self.assertIn("transcribing_client", session_manager.completed_stages)
+
+        session_manager._update_stage("analysing", "Analyzing conversation", "AI extraction")
+        self.assertIn("merging_transcript", session_manager.completed_stages)
+
+        session_manager._update_stage("preparing_review", "Preparing Salesforce draft", "Formatting draft")
+        self.assertIn("analysing", session_manager.completed_stages)
+
+        # Reset session_manager state
+        session_manager.state = "idle"
+        session_manager.stage = "none"
+        session_manager.stage_label = "Idle"
+        session_manager.completed_stages = []
 
     def test_demo_load_sample(self):
         response = self.client.post("/demo/load-sample")

@@ -34,10 +34,14 @@ class SessionManager:
         self.whisper_model = whisper_model
 
         self.state: str = "idle"  # "idle", "recording", "processing", "ready", "error"
-        self.stage: str = "none"  # "none", "capture", "transcription", "analysis", "ready"
+        self.stage: str = "none"  # "stopping", "transcribing_consultant", "transcribing_client", "merging_transcript", "analysing", "preparing_review", "ready", "error"
+        self.stage_label: str = "Idle"
+        self.message: str = "Ready for call capture"
         self.session_id: Optional[str] = None
         self.error_message: Optional[str] = None
         self.start_time: Optional[float] = None
+        self.processing_start_time: Optional[float] = None
+        self.completed_stages: list[str] = []
 
         self._pyaudio_instance: Optional[pyaudio.PyAudio] = None
         self._stream_mic = None
@@ -53,10 +57,26 @@ class SessionManager:
         self.mic_file = "consultant_mic.wav"
         self.loop_file = "client_loopback.wav"
 
-    def get_status(self) -> Dict[str, Any]:
-        """Returns current engine state and artifact readiness."""
+    def _update_stage(self, stage: str, stage_label: str, message: str):
+        """Thread-safe stage update recording completed milestones."""
         with self._lock:
-            elapsed = time.time() - self.start_time if self.start_time and self.state == "recording" else 0.0
+            if self.stage not in ("none", "idle", "recording", stage) and self.stage not in self.completed_stages:
+                self.completed_stages.append(self.stage)
+            self.stage = stage
+            self.stage_label = stage_label
+            self.message = message
+            logger.info(f"[STAGE: {stage}] {stage_label} - {message}")
+
+    def get_status(self) -> Dict[str, Any]:
+        """Returns current engine state, detailed processing progress, and artifact readiness."""
+        with self._lock:
+            if self.state == "recording":
+                elapsed = time.time() - self.start_time if self.start_time else 0.0
+            elif self.state == "processing":
+                elapsed = time.time() - self.processing_start_time if self.processing_start_time else 0.0
+            else:
+                elapsed = 0.0
+
             transcript_json_path = self.output_dir / "transcript.json"
             analysis_json_path = self.output_dir / "analysis.json"
             review_md_path = self.output_dir / "analysis_review.md"
@@ -65,8 +85,12 @@ class SessionManager:
             return {
                 "status": self.state,
                 "stage": self.stage,
+                "stage_label": self.stage_label,
+                "message": self.message,
+                "started_at": datetime.fromtimestamp(self.processing_start_time).isoformat() if self.processing_start_time else None,
+                "elapsed_seconds": int(elapsed),
+                "completed_stages": list(self.completed_stages),
                 "session_id": self.session_id,
-                "elapsed_seconds": round(elapsed, 1),
                 "error": self.error_message,
                 "has_transcript": transcript_json_path.exists(),
                 "has_analysis": analysis_json_path.exists(),
@@ -83,6 +107,8 @@ class SessionManager:
             self.session_id = f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
             self.error_message = None
             self.start_time = time.time()
+            self.processing_start_time = None
+            self.completed_stages = []
             self._capture_stop_event.clear()
             self._q_mic = queue.Queue()
             self._q_loop = queue.Queue()
@@ -152,12 +178,16 @@ class SessionManager:
                 self._writer_threads = [t1, t2]
 
                 self.state = "recording"
-                self.stage = "capture"
+                self.stage = "recording"
+                self.stage_label = "Recording call"
+                self.message = "Capturing consultant mic and headset loopback streams..."
                 logger.info(f"Capture started successfully (Session: {self.session_id})")
 
                 return {
                     "status": "recording",
-                    "stage": "capture",
+                    "stage": "recording",
+                    "stage_label": self.stage_label,
+                    "message": self.message,
                     "session_id": self.session_id,
                     "consultant_stream": "active",
                     "client_loopback_stream": "active"
@@ -165,6 +195,7 @@ class SessionManager:
             except Exception as e:
                 self.state = "error"
                 self.stage = "none"
+                self.stage_label = "Capture failed"
                 self.error_message = f"Failed to start WASAPI capture: {e}"
                 logger.error(self.error_message, exc_info=True)
                 self._cleanup_streams()
@@ -192,14 +223,20 @@ class SessionManager:
                 raise RuntimeError(f"Cannot stop capture when in '{self.state}' state.")
 
             self.state = "processing"
-            self.stage = "transcription"
+            self.stage = "stopping"
+            self.stage_label = "Finalizing audio capture"
+            self.message = "Flushing WAV audio buffers to disk..."
+            self.processing_start_time = time.time()
+            self.completed_stages = ["recording"]
 
         # Background processing worker
         threading.Thread(target=self._run_pipeline_worker, args=(skip_stt_demo,), daemon=True).start()
 
         return {
             "status": "processing",
-            "stage": "transcription",
+            "stage": self.stage,
+            "stage_label": self.stage_label,
+            "message": self.message,
             "session_id": self.session_id
         }
 
@@ -231,6 +268,7 @@ class SessionManager:
     def _run_pipeline_worker(self, skip_stt_demo: bool = False):
         try:
             logger.info("Stopping audio streams and flushing WAV buffers...")
+            self._update_stage("stopping", "Finalizing audio capture", "Stopping streams and flushing WAV buffers...")
             self._cleanup_streams()
             logger.info("Audio capture finalized.")
 
@@ -238,21 +276,20 @@ class SessionManager:
 
             # Stage 1: Transcription
             if not skip_stt_demo or not transcript_json_path.exists():
-                with self._lock:
-                    self.stage = "transcription"
+                self._update_stage("transcribing_consultant", "Transcribing consultant audio", "Whisper is processing consultant microphone on CPU...")
                 logger.info("Running transcription pipeline...")
                 pipeline = TranscriptionPipeline(model_name=self.whisper_model)
                 pipeline.process_session(
                     consultant_audio_path=self.mic_file,
                     client_audio_path=self.loop_file,
-                    output_dir=str(self.output_dir)
+                    output_dir=str(self.output_dir),
+                    stage_callback=self._update_stage
                 )
             else:
                 logger.info("Using cached transcript for instant processing.")
 
             # Stage 2: AI Conversation Intelligence
-            with self._lock:
-                self.stage = "analysis"
+            self._update_stage("analysing", "Analyzing conversation", "Extracting verified facts, commitments, and sentiment...")
             logger.info("Running AI Conversation Intelligence analysis...")
             analyzer = ConversationAnalyzer(provider=GroundedExtractionProvider())
             analyzer.analyze_file(
@@ -260,17 +297,26 @@ class SessionManager:
                 output_dir=str(self.output_dir)
             )
 
+            # Stage 3: Preparing Salesforce Draft
+            self._update_stage("preparing_review", "Preparing Salesforce draft", "Formatting draft case payload and review boundary...")
+
             with self._lock:
+                if self.stage not in self.completed_stages:
+                    self.completed_stages.append(self.stage)
                 self.state = "ready"
                 self.stage = "ready"
+                self.stage_label = "Processing complete"
+                self.message = "Call transcript, intelligence analysis, and Salesforce draft are ready."
             logger.info("Session processing completed successfully (State: ready).")
 
         except Exception as e:
             logger.error(f"Pipeline worker error: {e}", exc_info=True)
             with self._lock:
                 self.state = "error"
-                self.stage = "none"
-                self.error_message = str(e)
+                self.stage = "error"
+                self.stage_label = "Processing failed"
+                self.message = str(e)
+                self.error_message = f"Processing error: {str(e)}"
 
     def load_demo_sample(self) -> Dict[str, Any]:
         """Loads pre-analyzed real sample for immediate demonstration."""
