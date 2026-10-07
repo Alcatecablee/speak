@@ -375,6 +375,8 @@
       }
       engineState = 'recording';
       engineElapsedSeconds = 0;
+      artifactsLoaded = false;
+      currentSalesforcePayload = null;
       clearInterval(engineSessionTimer);
       engineSessionTimer = setInterval(() => {
         engineElapsedSeconds++;
@@ -386,6 +388,8 @@
       transcriptContainer.innerHTML = '<p class="italic text-slate-400">Recording live call… transcript will generate upon stopping capture.</p>';
       transcriptCount.textContent = 'Recording…';
       reviewContainer.innerHTML = '<p class="italic text-slate-400">Recording live call… AI analysis will generate upon stopping capture.</p>';
+      reviewConfidence.textContent = '—';
+      reviewConfidence.className = 'rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700';
       salesforceContainer.innerHTML = '<p class="italic text-slate-400">Recording live call… Salesforce draft will generate upon stopping capture.</p>';
     } catch (e) {
       showToast(`Failed to start capture: ${e.message}`);
@@ -433,30 +437,11 @@
         const analysisData = await resAnalysis.json();
         if (analysisData.data && analysisData.data.confidence) {
           reviewConfidence.textContent = `Confidence: ${analysisData.data.confidence.level} (${Math.round(analysisData.data.confidence.score * 100)}%)`;
+          reviewConfidence.className = 'rounded-full bg-teal-100 px-2.5 py-0.5 text-[11px] font-semibold text-teal-800 dark:bg-teal-950 dark:text-teal-300 border border-teal-200 dark:border-teal-800';
         }
       }
     } catch (e) {
       console.warn('Error fetching artifacts:', e);
-    }
-  }
-
-  function renderOfflineEmptyState(container, tabTitle) {
-    if (!container) return;
-    container.innerHTML = `
-      <div class="flex flex-col items-center justify-center h-full p-6 text-center text-slate-500">
-        <div class="mb-3 rounded-full bg-slate-100 p-3 dark:bg-slate-800">
-          <svg class="h-6 w-6 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-          </svg>
-        </div>
-        <p class="font-semibold text-sm text-slate-700 dark:text-slate-300">Local Engine is Offline</p>
-        <p class="mt-1 max-w-xs text-xs text-slate-500 dark:text-slate-400">Run <code class="rounded bg-slate-200 px-1 py-0.5 font-mono text-[11px] dark:bg-slate-800">start_speak_engine.bat</code> on Windows to capture live calls, or load the demo call to explore the intelligence pipeline.</p>
-        <button type="button" class="btn-load-demo-inline mt-4 btn btn-sm bg-indigo-600 text-white hover:bg-indigo-500">Load Demo Call</button>
-      </div>
-    `;
-    const inlineBtn = container.querySelector('.btn-load-demo-inline');
-    if (inlineBtn) {
-      inlineBtn.onclick = () => loadDemoCall();
     }
   }
 
@@ -579,12 +564,8 @@
     if (tagsNav) tagsNav.hidden = tabId !== 'notes' || engineConnected;
 
     if (tabId !== 'notes') {
-      if (engineConnected) {
+      if (engineConnected && artifactsLoaded) {
         fetchAndRenderEngineArtifacts();
-      } else if (!artifactsLoaded) {
-        if (tabId === 'transcript') renderOfflineEmptyState(transcriptContainer, 'Dialogue Transcript');
-        else if (tabId === 'review') renderOfflineEmptyState(reviewContainer, 'AI Summary');
-        else if (tabId === 'salesforce') renderOfflineEmptyState(salesforceContainer, 'Salesforce Draft');
       }
     }
   }
