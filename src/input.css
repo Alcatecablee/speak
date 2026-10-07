@@ -52,6 +52,32 @@
   .tab-item-active {
     @apply flex-1 rounded-lg py-1.5 text-xs font-bold bg-white text-slate-900 shadow-sm dark:bg-slate-800 dark:text-slate-50 text-center select-none;
   }
+
+  /* Processing Stepper */
+  .proc-item-complete {
+    @apply border border-emerald-300/60 bg-emerald-50/60 dark:border-emerald-800/60 dark:bg-emerald-950/30;
+  }
+  .proc-item-active {
+    @apply border border-amber-400 bg-amber-50/90 shadow-sm dark:border-amber-600/70 dark:bg-amber-950/40;
+  }
+  .proc-item-pending {
+    @apply border border-slate-200 bg-slate-50/50 opacity-60 dark:border-slate-800 dark:bg-slate-900/40;
+  }
+  .proc-item-failed {
+    @apply border border-red-300 bg-red-50/90 dark:border-red-800 dark:bg-red-950/40;
+  }
+  .proc-badge-complete {
+    @apply flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white text-[11px] font-bold;
+  }
+  .proc-badge-active {
+    @apply flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-500 text-white text-[11px] font-bold animate-pulse;
+  }
+  .proc-badge-pending {
+    @apply flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-200 text-slate-500 dark:bg-slate-800 dark:text-slate-400 text-[11px] font-semibold;
+  }
+  .proc-badge-failed {
+    @apply flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-red-600 text-white text-[11px] font-bold;
+  }
 }
 
 /* Recording feedback: pulsing red ring around the mic button */

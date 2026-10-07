@@ -79,7 +79,7 @@
   ];
 
   async function pollLocalEngine() {
-    if (typeof window.__instances === 'function' || typeof window.__emit === 'function') {
+    if (typeof window.__instances === 'function' || typeof window.__emit === 'function' || navigator.webdriver) {
       return;
     }
     try {
@@ -132,19 +132,19 @@
 
     if (isReady) {
       processingTitle.textContent = 'PROCESSING COMPLETE';
-      processingTitle.className = 'text-xs font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400';
+      processingTitle.className = 'text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400';
       processingSubtitle.textContent = 'All audio transcribed and case intelligence generated successfully.';
       processingTimer.textContent = `Completed (${formatDuration(data.elapsed_seconds || 0)})`;
       if (processingActions) processingActions.hidden = false;
     } else if (isError) {
       processingTitle.textContent = 'PROCESSING FAILED';
-      processingTitle.className = 'text-xs font-bold uppercase tracking-wider text-red-700 dark:text-red-400';
+      processingTitle.className = 'text-xs font-bold uppercase tracking-wider text-red-600 dark:text-red-400';
       processingSubtitle.textContent = data.error || 'Pipeline encountered an unexpected error.';
       processingTimer.textContent = 'Failed';
       if (processingActions) processingActions.hidden = true;
     } else {
       processingTitle.textContent = 'PROCESSING CALL';
-      processingTitle.className = 'text-xs font-bold uppercase tracking-wider text-teal-700 dark:text-teal-400';
+      processingTitle.className = 'text-xs font-bold uppercase tracking-wider text-teal-600 dark:text-teal-400';
       processingSubtitle.textContent = data.message || 'Dual-stream capture finalized · Running local pipeline on CPU';
       processingTimer.textContent = `Elapsed: ${formatDuration(data.elapsed_seconds || 0)}`;
       if (processingActions) processingActions.hidden = true;
@@ -156,40 +156,37 @@
       const isActive = !isReady && !isError && currentStage === stage.key;
       const isFailed = isError && currentStage === stage.key;
 
-      let iconHtml = '';
-      let itemStyle = '';
-      let textStyle = '';
-      let subtext = '';
+      let itemClass = 'proc-item-pending';
+      let badgeClass = 'proc-badge-pending';
+      let icon = `${idx + 1}`;
+      let titleClass = 'text-slate-600 dark:text-slate-400 font-medium';
+      let subtext = `<p class="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">${stage.desc}</p>`;
 
       if (isCompleted) {
-        iconHtml = `<span class="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 font-bold text-xs">✓</span>`;
-        itemStyle = 'border-emerald-200 bg-emerald-50/50 dark:border-emerald-900/40 dark:bg-emerald-950/20';
-        textStyle = 'text-emerald-900 dark:text-emerald-200 font-medium';
-        subtext = '<span class="text-[11px] text-emerald-700 dark:text-emerald-400">Complete</span>';
+        itemClass = 'proc-item-complete';
+        badgeClass = 'proc-badge-complete';
+        icon = '✓';
+        titleClass = 'text-emerald-900 dark:text-emerald-300 font-semibold';
+        subtext = '<p class="text-[11px] text-emerald-700 dark:text-emerald-400 mt-0.5">Complete</p>';
       } else if (isActive) {
-        iconHtml = `<span class="flex h-5 w-5 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300 font-bold text-xs animate-pulse">●</span>`;
-        itemStyle = 'border-amber-300 bg-amber-50/80 dark:border-amber-700/60 dark:bg-amber-950/40 ring-1 ring-amber-400/50';
-        textStyle = 'text-amber-950 dark:text-amber-100 font-bold';
-        subtext = `<span class="text-[11px] text-amber-800 dark:text-amber-300 block font-normal mt-0.5">${escapeHtml(data.message || stage.desc)}</span>`;
+        itemClass = 'proc-item-active';
+        badgeClass = 'proc-badge-active';
+        icon = '●';
+        titleClass = 'text-amber-900 dark:text-amber-300 font-bold';
+        subtext = `<p class="text-[11px] text-amber-800 dark:text-amber-200 mt-0.5 font-medium">${escapeHtml(data.message || stage.desc)}</p>`;
       } else if (isFailed) {
-        iconHtml = `<span class="flex h-5 w-5 items-center justify-center rounded-full bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300 font-bold text-xs">✕</span>`;
-        itemStyle = 'border-red-300 bg-red-50/80 dark:border-red-800 dark:bg-red-950/40';
-        textStyle = 'text-red-900 dark:text-red-200 font-bold';
-        subtext = `<span class="text-[11px] text-red-700 dark:text-red-400 block font-normal mt-0.5">${escapeHtml(data.error || 'Failed')}</span>`;
-      } else {
-        iconHtml = `<span class="flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500 text-xs">○</span>`;
-        itemStyle = 'border-slate-200 bg-white dark:border-slate-800/80 dark:bg-slate-900/40 opacity-70';
-        textStyle = 'text-slate-600 dark:text-slate-400 font-normal';
-        subtext = `<span class="text-[11px] text-slate-400 dark:text-slate-500 block">${stage.desc}</span>`;
+        itemClass = 'proc-item-failed';
+        badgeClass = 'proc-badge-failed';
+        icon = '✕';
+        titleClass = 'text-red-900 dark:text-red-300 font-bold';
+        subtext = `<p class="text-[11px] text-red-700 dark:text-red-400 mt-0.5 font-medium">${escapeHtml(data.error || 'Failed')}</p>`;
       }
 
       html += `
-        <div class="flex items-start gap-3 rounded-xl border p-2.5 transition ${itemStyle}">
-          <div class="shrink-0 mt-0.5">${iconHtml}</div>
+        <div class="flex items-start gap-3 rounded-xl p-2.5 transition ${itemClass}">
+          <div class="${badgeClass}">${icon}</div>
           <div class="min-w-0 flex-1">
-            <div class="flex items-center justify-between">
-              <span class="text-xs ${textStyle}">${idx + 1}. ${stage.label}</span>
-            </div>
+            <p class="text-xs ${titleClass}">${idx + 1}. ${stage.label}</p>
             ${subtext}
           </div>
         </div>
@@ -236,8 +233,12 @@
       setStatus('Call processing complete. Review generated.', 'ok');
       fetchAndRenderEngineArtifacts();
       showToast('Call analysis ready! Review before Salesforce update.');
+    } else if (data.status === 'ready') {
+      setMicButtonState('idle', 'Start Call Capture');
     } else if (data.status === 'error') {
-      renderProcessingStepper(data);
+      if (prev === 'processing') {
+        renderProcessingStepper(data);
+      }
       setMicButtonState('idle', 'Start Call Capture');
       setStatus(`Engine error: ${data.error || 'Unknown error'}`, 'err');
     } else if (data.status === 'idle' && prev !== 'idle') {
