@@ -97,6 +97,7 @@
 
   function setEngineConnectionState(connected, data = null) {
     engineConnected = connected;
+    if (tagsNav) tagsNav.hidden = connected;
     if (connected) {
       engineDot.className = 'h-2 w-2 rounded-full bg-emerald-500 animate-pulse';
       engineText.textContent = 'Engine Connected';
@@ -119,6 +120,7 @@
   function renderProcessingStepper(data) {
     if (!processingCard || !processingStepper) return;
 
+    if (tagsNav) tagsNav.hidden = true;
     processingCard.hidden = false;
     panelNotes.hidden = true;
     panelTranscript.hidden = true;
@@ -468,7 +470,7 @@
       t.btn.className = active ? 'tab-item-active' : 'tab-item';
     });
 
-    if (tagsNav) tagsNav.hidden = tabId !== 'notes';
+    if (tagsNav) tagsNav.hidden = tabId !== 'notes' || engineConnected;
   }
 
   tabNotes.addEventListener('click', () => switchTab('notes'));
