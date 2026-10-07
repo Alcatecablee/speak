@@ -68,6 +68,90 @@
   let engineSessionTimer = null;
   let engineElapsedSeconds = 0;
   let currentSalesforcePayload = null;
+  let artifactsLoaded = false;
+
+  const DEMO_TRANSCRIPT_DATA = {
+    merged_turns: [
+      { speaker: "CONSULTANT", timestamp_str: "22:37:40", text: "20288 2622 2622 Zero double six Oh nine or mine. Okay, I'm connected now." },
+      { speaker: "CLIENT", timestamp_str: "22:38:39", text: "Okay, let me show you the variance calculation on screen with the cheesecake batch." },
+      { speaker: "CONSULTANT", timestamp_str: "22:40:12", text: "Right, looking at the unit of measure setting here in the production module." },
+      { speaker: "CLIENT", timestamp_str: "22:45:02", text: "And then for the butternut puree, we need that unit configured in 1 KG." },
+      { speaker: "CONSULTANT", timestamp_str: "22:46:09", text: "Okay, I'll investigate the cheesecake production configuration on my side and call you back in 15 minutes." }
+    ]
+  };
+
+  const DEMO_REVIEW_MARKDOWN = `# Speak V2 — Case Conversation Intelligence Report
+
+> [!IMPORTANT]
+> **STATUS**: DRAFT — HUMAN REVIEW REQUIRED BEFORE CRM SUBMISSION  
+> This analysis was automatically generated from call audio. Review highlighted evidence and commitments below.
+
+**Call Timestamp**: \`2026-10-06T22:37:39\`  
+**Total Dialogue Turns**: \`90 turns\`  
+**Resolution Classification**: **\`FOLLOW_UP_REQUIRED\`**  
+**Resolution Basis**: Consultant confirmed a follow-up callback commitment (Within 15 minutes) to finalize recipe configuration.  
+**Evidence Quality Confidence**: \`HIGH\` (80%)  
+
+---
+
+## 1. Executive Summary
+- **Reason for Contact**: Client requested assistance with production batch variance discrepancies (cheesecake slices vs whole unit) and butternut puree unit configuration.
+- **Verified Key Events**:
+  * Consultant established remote session with client (Remote ID: 20288 2622 2622).
+  * Client demonstrated cheesecake recipe variance discrepancy (system registering whole batch rather than individual portion slices).
+  * Consultant identified the root cause as a unit of measure definition in the production module.
+  * Client requested assistance with secondary item (Butternut Puree unit setting in 1 KG).
+  * Consultant committed to investigating both items and calling back (Within 15 minutes).
+- **Outcome**: Consultant agreed to investigate the cheesecake production configuration and call the client back (Within 15 minutes).
+
+## 2. Client Issue & Evidence (Direct Facts)
+- **Primary Reported Problem**: Cheesecake batch variance deducting whole unit instead of slice portions.
+- **Direct Client Claims**:
+  * Cheesecake batch variance deducting whole unit instead of slice portions.
+  * Butternut puree configuration request (change unit to 1 KG).
+
+## 3. Actions & Commitment Classification
+| Type | Actor | Action Description | Timeframe | Direct Evidence Quote |
+| :--- | :--- | :--- | :--- | :--- |
+| **\`COMPLETED_ACTION\`** | \`CONSULTANT\` | Consultant connected remotely to client workstation | \`-\` | *"20288 2622 2622 Zero double six Oh nine or mine..."* |
+| **\`COMPLETED_ACTION\`** | \`CLIENT\` | Client demonstrated variance calculation on screen | \`-\` | *"Okay, all right, let me show you...."* |
+| **\`COMPLETED_ACTION\`** | \`CONSULTANT\` | Consultant diagnosed unit of measure configuration mismatch | \`-\` | *"which needs to be changed because the quantity..."* |
+| **\`PROPOSED_ACTION\`** | \`CONSULTANT\` | Consultant proposed potential escalation to software support | \`-\` | *"Yeah, because also me, first, I need to understand..."* |
+| **\`CONFIRMED_COMMITMENT\`** | \`CONSULTANT\` | Consultant committed to investigate recipe configuration and call client back | \`Within 15 minutes\` | *"side. I'll give maximum 15 minutes. I'll call you back..."* |
+
+## 4. Follow-up Commitments
+- **Follow-up Required**: \`YES\`
+- **Responsible Party**: \`CONSULTANT\`
+- **Committed Timeframe**: \`Within 15 minutes\`
+- **Confirmed Action Items**: Consultant to investigate cheesecake production configuration and call client back with update/fix.
+- **Commitment Evidence**: *"Okay, okay, no, I can do that is all for you and then I'll call you once after 15 minutes, okay?"*
+
+## 5. Grounded & Normalized Entities
+- **Customer / Remote IDs**: \`20288 2622 2622\`
+- **Products / Items**: \`Cheesecake Recipe / Batch\`, \`Stock Variance\`, \`Butternut Puree\`
+- **System Settings**: \`Unit of Measure Configuration\`, \`Production Module\`
+
+## 6. Customer Sentiment (AI Interpretation)
+> [!NOTE]
+> **Assessed Sentiment**: \`NEUTRAL\`  
+> **Rationale**: Client was polite and operational; consultant was responsive with clear callback commitment.`;
+
+  const DEMO_SALESFORCE_PAYLOAD = {
+    sobject: "Case",
+    action: "DRAFT_UPDATE",
+    human_review_status: "PENDING_CONSULTANT_APPROVAL",
+    requires_consultant_confirmation: true,
+    fields: {
+      Subject: "Production Recipe Variance - 20288 2622 2622",
+      Description: "[DRAFT CASE RECORD - GENERATED BY SPEAK V2 - REVIEW REQUIRED]\nREASON FOR CONTACT:\nClient requested assistance with production batch variance discrepancies (cheesecake slices vs whole unit) and butternut puree unit configuration.\n\nPRIMARY ISSUE:\nCheesecake batch variance deducting whole unit instead of slice portions.\n\nCONFIRMED ACTIONS & COMMITMENTS:\n- [COMPLETED_ACTION] Consultant connected remotely to client workstation (Owner: CONSULTANT)\n- [COMPLETED_ACTION] Client demonstrated variance calculation on screen with test values (Owner: CLIENT)\n- [COMPLETED_ACTION] Consultant diagnosed unit of measure configuration mismatch (Owner: CONSULTANT)\n- [PROPOSED_ACTION] Consultant proposed potential escalation to software support department (Owner: CONSULTANT)\n- [CONFIRMED_COMMITMENT] Consultant committed to investigate cheesecake recipe configuration and call client back (Owner: CONSULTANT)\n\nFOLLOW UP REQUIRED: YES\nFOLLOW UP DETAILS: Consultant to investigate cheesecake production configuration and call client back with update/fix. (Timeframe: Within 15 minutes)\n\nRESOLUTION STATUS: FOLLOW_UP_REQUIRED\nRESOLUTION BASIS: Consultant confirmed a follow-up callback commitment (Within 15 minutes) to finalize recipe configuration.",
+      Status: "Pending Follow-up",
+      Resolution_Category__c: "Production Configuration",
+      Remote_Connection_ID__c: "20288 2622 2622",
+      Client_Sentiment__c: "NEUTRAL",
+      AI_Confidence_Score__c: 0.8,
+      Internal_Review_Notes__c: "Repetitive STT looping detected in transcript. Phonetic normalization applied to 1 term(s) (e.g. 'Bata Nadpuray' -> 'Butternut Puree'). Review raw quote if unverified."
+    }
+  };
 
   const PIPELINE_STAGES = [
     { key: 'stopping', label: 'Audio Capture Finalization', desc: 'Flushing WAV audio streams to disk' },
@@ -356,8 +440,29 @@
     }
   }
 
+  function renderOfflineEmptyState(container, tabTitle) {
+    if (!container) return;
+    container.innerHTML = `
+      <div class="flex flex-col items-center justify-center h-full p-6 text-center text-slate-500">
+        <div class="mb-3 rounded-full bg-slate-100 p-3 dark:bg-slate-800">
+          <svg class="h-6 w-6 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+        </div>
+        <p class="font-semibold text-sm text-slate-700 dark:text-slate-300">Local Engine is Offline</p>
+        <p class="mt-1 max-w-xs text-xs text-slate-500 dark:text-slate-400">Run <code class="rounded bg-slate-200 px-1 py-0.5 font-mono text-[11px] dark:bg-slate-800">start_speak_engine.bat</code> on Windows to capture live calls, or load the demo call to explore the intelligence pipeline.</p>
+        <button type="button" class="btn-load-demo-inline mt-4 btn btn-sm bg-indigo-600 text-white hover:bg-indigo-500">Load Demo Call</button>
+      </div>
+    `;
+    const inlineBtn = container.querySelector('.btn-load-demo-inline');
+    if (inlineBtn) {
+      inlineBtn.onclick = () => loadDemoCall();
+    }
+  }
+
   function renderTranscript(transJson) {
     if (!transJson || !transJson.merged_turns) return;
+    artifactsLoaded = true;
     const turns = transJson.merged_turns;
     transcriptCount.textContent = `${turns.length} turns`;
 
@@ -385,6 +490,7 @@
 
   function renderReview(reviewData) {
     if (!reviewData) return;
+    artifactsLoaded = true;
     
     // Render Markdown summary nicely
     const md = reviewData.markdown || '';
@@ -471,58 +577,84 @@
     });
 
     if (tagsNav) tagsNav.hidden = tabId !== 'notes' || engineConnected;
+
+    if (tabId !== 'notes') {
+      if (engineConnected) {
+        fetchAndRenderEngineArtifacts();
+      } else if (!artifactsLoaded) {
+        if (tabId === 'transcript') renderOfflineEmptyState(transcriptContainer, 'Dialogue Transcript');
+        else if (tabId === 'review') renderOfflineEmptyState(reviewContainer, 'AI Summary');
+        else if (tabId === 'salesforce') renderOfflineEmptyState(salesforceContainer, 'Salesforce Draft');
+      }
+    }
   }
 
   tabNotes.addEventListener('click', () => switchTab('notes'));
   tabTranscript.addEventListener('click', () => {
     switchTab('transcript');
-    if (engineConnected) fetchAndRenderEngineArtifacts();
   });
   tabReview.addEventListener('click', () => {
     switchTab('review');
-    if (engineConnected) fetchAndRenderEngineArtifacts();
   });
   tabSalesforce.addEventListener('click', () => {
     switchTab('salesforce');
-    if (engineConnected) fetchAndRenderEngineArtifacts();
   });
 
   if (btnViewTranscript) {
     btnViewTranscript.addEventListener('click', () => {
       switchTab('transcript');
-      fetchAndRenderEngineArtifacts();
+      if (engineConnected) fetchAndRenderEngineArtifacts();
     });
   }
   if (btnViewReview) {
     btnViewReview.addEventListener('click', () => {
       switchTab('review');
-      fetchAndRenderEngineArtifacts();
+      if (engineConnected) fetchAndRenderEngineArtifacts();
     });
   }
   if (btnViewSf) {
     btnViewSf.addEventListener('click', () => {
       switchTab('salesforce');
-      fetchAndRenderEngineArtifacts();
+      if (engineConnected) fetchAndRenderEngineArtifacts();
     });
   }
 
   // ---------------------------------------------------------------- Demo & Copy Actions
-  btnLoadSample.addEventListener('click', async () => {
-    if (!engineConnected) {
-      showToast('Start Speak Local Engine (start_speak_engine.bat) first.');
-      return;
-    }
-    showToast('Loading real call demo sample…');
-    try {
-      const res = await fetch(`${LOCAL_ENGINE_URL}/demo/load-sample`, { method: 'POST' });
-      if (res.ok) {
-        await fetchAndRenderEngineArtifacts();
-        switchTab('review');
-        showToast('Real 9-minute call sample loaded!');
+  async function loadDemoCall() {
+    showToast('Loading demo call sample…');
+    if (engineConnected) {
+      try {
+        const res = await fetch(`${LOCAL_ENGINE_URL}/demo/load-sample`, { method: 'POST' });
+        if (res.ok) {
+          await fetchAndRenderEngineArtifacts();
+          artifactsLoaded = true;
+          switchTab('review');
+          showToast('Real 9-minute call sample loaded!');
+          return;
+        }
+      } catch (e) {
+        console.warn('Local engine demo load failed, using embedded demo fallback:', e);
       }
-    } catch (e) {
-      showToast(`Error loading sample: ${e.message}`);
     }
+
+    // Client-side demo fallback (instant & works offline on Vercel without local backend)
+    try {
+      renderTranscript(DEMO_TRANSCRIPT_DATA);
+      renderReview({
+        markdown: DEMO_REVIEW_MARKDOWN,
+        salesforce_draft: DEMO_SALESFORCE_PAYLOAD
+      });
+      reviewConfidence.textContent = 'Confidence: HIGH (80%)';
+      artifactsLoaded = true;
+      switchTab('review');
+      showToast('Demo call sample loaded!');
+    } catch (e) {
+      showToast(`Error loading demo sample: ${e.message}`, 'Retry', () => loadDemoCall());
+    }
+  }
+
+  btnLoadSample.addEventListener('click', () => {
+    loadDemoCall();
   });
 
   copySfBtn.addEventListener('click', () => {

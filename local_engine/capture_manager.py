@@ -115,9 +115,20 @@ class SessionManager:
 
             try:
                 self._pyaudio_instance = pyaudio.PyAudio()
-                wasapi_info = self._pyaudio_instance.get_host_api_info_by_type(pyaudio.paWASAPI)
-                default_mic = self._pyaudio_instance.get_device_info_by_index(wasapi_info["defaultInputDevice"])
-                default_loopback = self._pyaudio_instance.get_default_wasapi_loopback()
+                try:
+                    wasapi_info = self._pyaudio_instance.get_host_api_info_by_type(pyaudio.paWASAPI)
+                except Exception:
+                    raise RuntimeError("Windows WASAPI audio host API is not available on this system.")
+
+                try:
+                    default_mic = self._pyaudio_instance.get_device_info_by_index(wasapi_info["defaultInputDevice"])
+                except Exception:
+                    raise RuntimeError("No default microphone found for WASAPI audio capture.")
+
+                try:
+                    default_loopback = self._pyaudio_instance.get_default_wasapi_loopback()
+                except Exception:
+                    raise RuntimeError("No default WASAPI loopback output device found. Ensure speakers or headphones are connected.")
 
                 mic_rate = int(default_mic["defaultSampleRate"])
                 mic_channels = default_mic["maxInputChannels"]
@@ -196,7 +207,11 @@ class SessionManager:
                 self.state = "error"
                 self.stage = "none"
                 self.stage_label = "Capture failed"
-                self.error_message = f"Failed to start WASAPI capture: {e}"
+                err_str = str(e)
+                if "WASAPI" in err_str or "microphone" in err_str.lower() or "device" in err_str.lower():
+                    self.error_message = f"Audio device error: {err_str}"
+                else:
+                    self.error_message = f"Failed to start audio capture: {err_str}"
                 logger.error(self.error_message, exc_info=True)
                 self._cleanup_streams()
                 raise RuntimeError(self.error_message)
