@@ -100,63 +100,36 @@ def stop_capture(skip_stt: bool = Query(default=False, description="For fast hac
 
 
 @app.get("/transcript")
-def get_transcript():
-    """Returns transcript JSON and formatted plain text."""
-    json_path = session_manager.output_dir / "transcript.json"
-    txt_path = session_manager.output_dir / "transcript.txt"
-
-    if not json_path.exists():
-        raise HTTPException(status_code=404, detail="No transcript found. Record a call first.")
-
-    with open(json_path, "r", encoding="utf-8") as f:
-        transcript_json = json.load(f)
-
-    raw_text = txt_path.read_text(encoding="utf-8") if txt_path.exists() else ""
-
-    return {
-        "status": "success",
-        "data": transcript_json,
-        "formatted_text": raw_text
-    }
+def get_transcript(session_id: Optional[str] = Query(default=None, description="Active session ID")):
+    """Returns transcript JSON and formatted plain text for active session."""
+    try:
+        return session_manager.get_transcript_data(session_id=session_id)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 @app.get("/analysis")
-def get_analysis():
-    """Returns structured conversation intelligence JSON."""
-    analysis_path = session_manager.output_dir / "analysis.json"
-    if not analysis_path.exists():
-        raise HTTPException(status_code=404, detail="No analysis found. Record a call first.")
-
-    with open(analysis_path, "r", encoding="utf-8") as f:
-        analysis_json = json.load(f)
-
-    return {
-        "status": "success",
-        "data": analysis_json
-    }
+def get_analysis(session_id: Optional[str] = Query(default=None, description="Active session ID")):
+    """Returns structured conversation intelligence JSON for active session."""
+    try:
+        return session_manager.get_analysis_data(session_id=session_id)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 @app.get("/review")
-def get_review():
-    """Returns human-reviewable Markdown summary and draft Salesforce payload."""
-    review_path = session_manager.output_dir / "analysis_review.md"
-    sf_path = session_manager.output_dir / "salesforce_draft_payload.json"
-
-    if not review_path.exists():
-        raise HTTPException(status_code=404, detail="No review document found. Record a call first.")
-
-    markdown_text = review_path.read_text(encoding="utf-8")
-    
-    sf_payload = {}
-    if sf_path.exists():
-        with open(sf_path, "r", encoding="utf-8") as f:
-            sf_payload = json.load(f)
-
-    return {
-        "status": "success",
-        "markdown": markdown_text,
-        "salesforce_draft": sf_payload
-    }
+def get_review(session_id: Optional[str] = Query(default=None, description="Active session ID")):
+    """Returns human-reviewable Markdown summary and draft Salesforce payload for active session."""
+    try:
+        return session_manager.get_review_data(session_id=session_id)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 @app.post("/demo/load-sample")

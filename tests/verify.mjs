@@ -419,6 +419,202 @@ try {
       !!(await caches.match('./procedures/procedureReminder.js')) && !!(await caches.match('./procedures/demoProcedures.js'))));
     await ctx.close();
   }
+
+  // ------------------------------------------------------------------ Session Provenance & Tab Switch Persistence (LIVE SESSION TEST 8472)
+  console.log('\nSession Provenance & Tab Switch Persistence (LIVE SESSION TEST 8472)');
+  {
+    const marker = 'LIVE SESSION TEST 8472';
+    const { ctx, page, errors } = await newPage({
+      viewport: { width: 1280, height: 800 }
+    }, {
+      init: () => {
+        window.__enableEngineInTest = true;
+        let mockState = 'idle';
+        // Intercept window.fetch to simulate local engine responding with live session data
+        const origFetch = window.fetch;
+        window.fetch = async (input, init) => {
+          const urlStr = typeof input === 'string' ? input : (input && input.url ? input.url : '');
+          if (urlStr.includes('/health')) {
+            return new Response(JSON.stringify({ status: 'ok', loopback_only: true }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' }
+            });
+          }
+          if (urlStr.includes('/capture/start')) {
+            mockState = 'recording';
+            return new Response(JSON.stringify({
+              status: 'recording',
+              session_id: 'live_session_8472',
+              stage_label: 'Recording call'
+            }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' }
+            });
+          }
+          if (urlStr.includes('/capture/stop')) {
+            mockState = 'processing';
+            return new Response(JSON.stringify({
+              status: 'processing',
+              session_id: 'live_session_8472',
+              stage_label: 'Finalizing audio capture'
+            }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' }
+            });
+          }
+          if (urlStr.includes('/status')) {
+            if (mockState === 'processing') {
+              mockState = 'ready';
+              return new Response(JSON.stringify({
+                status: 'ready',
+                stage: 'ready',
+                stage_label: 'Ready',
+                session_id: 'live_session_8472',
+                session_type: 'live',
+                has_transcript: true
+              }), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' }
+              });
+            }
+            return new Response(JSON.stringify({
+              status: mockState,
+              stage: mockState,
+              stage_label: mockState === 'recording' ? 'Recording call' : 'Idle',
+              session_id: 'live_session_8472',
+              session_type: 'live',
+              has_transcript: mockState === 'ready'
+            }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' }
+            });
+          }
+          if (urlStr.includes('/transcript')) {
+            return new Response(JSON.stringify({
+              status: 'success',
+              session_id: 'live_session_8472',
+              session_type: 'live',
+              data: {
+                session_id: 'live_session_8472',
+                session_type: 'live',
+                total_turns: 2,
+                merged_turns: [
+                  { speaker: 'CONSULTANT', text: 'Hello, ' + 'LIVE SESSION TEST 8472' + ' started.' },
+                  { speaker: 'CLIENT', text: 'Confirmed, received marker ' + 'LIVE SESSION TEST 8472' + '.' }
+                ]
+              },
+              formatted_text: '[CONSULTANT]: Hello, LIVE SESSION TEST 8472 started.\n[CLIENT]: Confirmed, received marker LIVE SESSION TEST 8472.'
+            }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' }
+            });
+          }
+          if (urlStr.includes('/analysis')) {
+            return new Response(JSON.stringify({
+              status: 'success',
+              session_id: 'live_session_8472',
+              session_type: 'live',
+              data: {
+                session_id: 'live_session_8472',
+                session_type: 'live',
+                executive_summary: 'Live analysis for LIVE SESSION TEST 8472',
+                issue_category: 'Hardware / Printer',
+                root_cause: 'Network offline during LIVE SESSION TEST 8472',
+                action_items_consultant: ['Follow up LIVE SESSION TEST 8472'],
+                action_items_client: ['Check power on LIVE SESSION TEST 8472'],
+                resolution_status: 'RESOLVED',
+                confidence: { level: 'HIGH', score: 0.95 }
+              }
+            }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' }
+            });
+          }
+          if (urlStr.includes('/review')) {
+            return new Response(JSON.stringify({
+              status: 'success',
+              session_id: 'live_session_8472',
+              session_type: 'live',
+              markdown: '# Case Review for LIVE SESSION TEST 8472\n\nLive verified call analysis.',
+              salesforce_draft: {
+                action: 'CREATE_CASE',
+                fields: {
+                  Subject: 'Live Call - LIVE SESSION TEST 8472',
+                  Description: 'Salesforce draft payload for LIVE SESSION TEST 8472',
+                  Status: 'Pending Review',
+                  Remote_Connection_ID__c: '8472-TEST'
+                }
+              }
+            }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' }
+            });
+          }
+          return origFetch(input, init);
+        };
+      }
+    });
+
+    // Wait for engine poll to see 'Engine Connected'
+    await page.waitForFunction(() => document.getElementById('engine-text')?.textContent === 'Engine Connected');
+    check('engine status connected', (await page.locator('#engine-text').innerText()) === 'Engine Connected');
+
+    // Trigger capture start + stop
+    await page.click('#mic'); // start capture
+    await page.waitForSelector('#mic[data-state="recording"]');
+    check('recording started with active live session', true);
+
+    await page.click('#mic'); // stop capture
+    await page.waitForSelector('#btn-view-transcript:not([hidden])', { timeout: 5000 });
+    check('processing completed to ready state', true);
+
+    // 1. Dialogue Tab Verification
+    await page.click('#tab-transcript');
+    await page.waitForTimeout(200);
+    const transcriptText = await page.locator('#transcript-container').innerText();
+    check('dialogue tab contains LIVE SESSION TEST 8472 marker', transcriptText.includes(marker), transcriptText);
+    check('dialogue tab does not contain demo data', !transcriptText.includes('cheesecake') && !transcriptText.includes('butternut'));
+
+    // 2. AI Summary Tab Verification
+    await page.click('#tab-review');
+    await page.waitForTimeout(200);
+    const reviewText = await page.locator('#review-container').innerText();
+    check('AI summary tab contains LIVE SESSION TEST 8472 marker', reviewText.includes(marker), reviewText);
+    check('AI summary tab does not contain demo data', !reviewText.includes('cheesecake') && !reviewText.includes('butternut'));
+
+    // 3. Salesforce Draft Tab Verification
+    await page.click('#tab-salesforce');
+    await page.waitForTimeout(200);
+    const getSfContent = () => page.locator('#salesforce-container').evaluate((el) => {
+      const inputs = Array.from(el.querySelectorAll('input, textarea')).map((i) => i.value).join(' ');
+      return el.innerText + ' ' + inputs;
+    });
+    const sfText = await getSfContent();
+    check('salesforce draft tab contains LIVE SESSION TEST 8472 marker', sfText.includes(marker), sfText);
+    check('salesforce draft tab does not contain demo data', !sfText.includes('cheesecake') && !sfText.includes('butternut'));
+
+    // 4. Repeated Tab Switching Isolation Check
+    for (let i = 0; i < 3; i++) {
+      await page.click('#tab-transcript');
+      await page.click('#tab-review');
+      await page.click('#tab-salesforce');
+    }
+    const sfTextAfterSwitching = await getSfContent();
+    check('salesforce draft retains live marker after multiple tab switches', sfTextAfterSwitching.includes(marker));
+    await page.click('#tab-transcript');
+    const transcriptAfterSwitching = await page.locator('#transcript-container').innerText();
+    check('dialogue retains live marker after multiple tab switches', transcriptAfterSwitching.includes(marker));
+
+    // 5. Verify Demo Button explicitly loads demo
+    await page.click('#btn-load-sample');
+    await page.waitForTimeout(400);
+    await page.click('#tab-transcript');
+    const demoTranscript = await page.locator('#transcript-container').innerText();
+    check('demo button explicitly loads demo data', demoTranscript.includes('cheesecake') || demoTranscript.includes('butternut') || demoTranscript.includes('20288'));
+
+    check('no uncaught JS errors in session provenance test', errors.length === 0, errors.join('; '));
+    await ctx.close();
+  }
 } finally {
   await browser.close();
   server.close();

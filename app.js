@@ -163,7 +163,7 @@
   ];
 
   async function pollLocalEngine() {
-    if (typeof window.__instances === 'function' || typeof window.__emit === 'function' || navigator.webdriver) {
+    if (!window.__enableEngineInTest && (typeof window.__instances === 'function' || typeof window.__emit === 'function' || navigator.webdriver)) {
       return;
     }
     try {
@@ -317,8 +317,10 @@
       renderProcessingStepper(data);
       setMicButtonState('idle', 'Start Call Capture');
       setStatus('Call processing complete. Review generated.', 'ok');
-      fetchAndRenderEngineArtifacts();
-      showToast('Call analysis ready! Review before Salesforce update.');
+      activeSessionId = data.session_id || activeSessionId;
+      activeSessionType = data.session_type || 'live';
+      fetchAndRenderEngineArtifacts(activeSessionId);
+      showToast('Live call analysis ready! Review before Salesforce update.');
     } else if (data.status === 'ready') {
       setMicButtonState('idle', 'Start Call Capture');
     } else if (data.status === 'error') {
@@ -365,6 +367,9 @@
   }
   const setMicState = setMicButtonState;
 
+  let activeSessionId = null;
+  let activeSessionType = 'none'; // 'live', 'demo', 'none'
+
   async function startEngineCallCapture() {
     try {
       setStatus('Connecting to audio streams…');
@@ -373,6 +378,9 @@
         const err = await res.json();
         throw new Error(err.detail || 'Could not start capture');
       }
+      const resData = await res.json();
+      activeSessionId = resData.session_id || null;
+      activeSessionType = 'live';
       engineState = 'recording';
       engineElapsedSeconds = 0;
       artifactsLoaded = false;
@@ -385,12 +393,12 @@
       setMicButtonState('recording');
 
       // Clear previous call artifacts while new recording is in progress
-      transcriptContainer.innerHTML = '<p class="italic text-slate-400">Recording live call… transcript will generate upon stopping capture.</p>';
+      transcriptContainer.innerHTML = `<p class="italic text-slate-400">Recording live call (Session: ${escapeHtml(activeSessionId || '')})… transcript will generate upon stopping capture.</p>`;
       transcriptCount.textContent = 'Recording…';
-      reviewContainer.innerHTML = '<p class="italic text-slate-400">Recording live call… AI analysis will generate upon stopping capture.</p>';
+      reviewContainer.innerHTML = `<p class="italic text-slate-400">Recording live call (Session: ${escapeHtml(activeSessionId || '')})… AI analysis will generate upon stopping capture.</p>`;
       reviewConfidence.textContent = '—';
       reviewConfidence.className = 'rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700';
-      salesforceContainer.innerHTML = '<p class="italic text-slate-400">Recording live call… Salesforce draft will generate upon stopping capture.</p>';
+      salesforceContainer.innerHTML = `<p class="italic text-slate-400">Recording live call (Session: ${escapeHtml(activeSessionId || '')})… Salesforce draft will generate upon stopping capture.</p>`;
     } catch (e) {
       showToast(`Failed to start capture: ${e.message}`);
       setStatus('Capture failed', 'err');
@@ -415,24 +423,33 @@
     }
   }
 
-  async function fetchAndRenderEngineArtifacts() {
+  async function fetchAndRenderEngineArtifacts(sessionId = null) {
+    const targetSession = sessionId || activeSessionId;
+    const sessionQuery = targetSession ? `?session_id=${encodeURIComponent(targetSession)}` : '';
     try {
       // 1. Fetch transcript
-      const resTrans = await fetch(`${LOCAL_ENGINE_URL}/transcript`);
-      if (resTrans.ok) {
-        const transData = await resTrans.json();
-        renderTranscript(transData.data);
+      const resTrans = await fetch(`${LOCAL_ENGINE_URL}/transcript${sessionQuery}`);
+      if (!resTrans.ok) {
+        const err = await resTrans.json();
+        throw new Error(`Transcript fetch failed: ${err.detail || resTrans.statusText}`);
       }
+      const transData = await resTrans.json();
+      if (transData.session_id && targetSession && transData.session_id !== targetSession) {
+        throw new Error(`Session mismatch: received ${transData.session_id}, expected ${targetSession}`);
+      }
+      renderTranscript(transData.data);
 
       // 2. Fetch analysis & review
-      const resReview = await fetch(`${LOCAL_ENGINE_URL}/review`);
-      if (resReview.ok) {
-        const reviewData = await resReview.json();
-        renderReview(reviewData);
+      const resReview = await fetch(`${LOCAL_ENGINE_URL}/review${sessionQuery}`);
+      if (!resReview.ok) {
+        const err = await resReview.json();
+        throw new Error(`Review fetch failed: ${err.detail || resReview.statusText}`);
       }
+      const reviewData = await resReview.json();
+      renderReview(reviewData);
 
       // 3. Fetch structured analysis JSON
-      const resAnalysis = await fetch(`${LOCAL_ENGINE_URL}/analysis`);
+      const resAnalysis = await fetch(`${LOCAL_ENGINE_URL}/analysis${sessionQuery}`);
       if (resAnalysis.ok) {
         const analysisData = await resAnalysis.json();
         if (analysisData.data && analysisData.data.confidence) {
@@ -440,8 +457,11 @@
           reviewConfidence.className = 'rounded-full bg-teal-100 px-2.5 py-0.5 text-[11px] font-semibold text-teal-800 dark:bg-teal-950 dark:text-teal-300 border border-teal-200 dark:border-teal-800';
         }
       }
+      artifactsLoaded = true;
     } catch (e) {
-      console.warn('Error fetching artifacts:', e);
+      console.error('Error fetching live session artifacts:', e);
+      setStatus(`Artifact error: ${e.message}`, 'err');
+      showToast(`Could not load session results: ${e.message}`, 'Retry', () => fetchAndRenderEngineArtifacts(targetSession));
     }
   }
 
@@ -486,8 +506,12 @@
 
     // Render Salesforce Draft
     currentSalesforcePayload = reviewData.salesforce_draft;
-    if (currentSalesforcePayload && currentSalesforcePayload.fields) {
-      const f = currentSalesforcePayload.fields;
+    if (currentSalesforcePayload) {
+      const f = currentSalesforcePayload.fields || currentSalesforcePayload;
+      const subject = f.Subject || f.subject || '';
+      const description = f.Description || f.description || '';
+      const status = f.Status || f.status || 'Pending';
+      const remoteId = f.Remote_Connection_ID__c || f.remote_connection_id || 'N/A';
       salesforceContainer.innerHTML = `
         <div class="space-y-3">
           <div class="rounded-xl border border-amber-300 bg-amber-50 p-3 dark:border-amber-700/60 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200">
@@ -497,20 +521,20 @@
           <div class="grid grid-cols-2 gap-2 text-xs">
             <div class="p-2 rounded-lg bg-slate-100 dark:bg-slate-800">
               <span class="text-slate-400 font-semibold block text-[10px]">CASE STATUS</span>
-              <span class="font-bold text-slate-800 dark:text-slate-200">${f.Status || 'Pending'}</span>
+              <span class="font-bold text-slate-800 dark:text-slate-200">${escapeHtml(status)}</span>
             </div>
             <div class="p-2 rounded-lg bg-slate-100 dark:bg-slate-800">
               <span class="text-slate-400 font-semibold block text-[10px]">REMOTE CONNECTION ID</span>
-              <span class="font-bold text-slate-800 dark:text-slate-200">${f.Remote_Connection_ID__c || 'N/A'}</span>
+              <span class="font-bold text-slate-800 dark:text-slate-200">${escapeHtml(remoteId)}</span>
             </div>
           </div>
           <div>
             <label class="font-bold text-xs block mb-1">Subject</label>
-            <input type="text" readonly value="${escapeHtml(f.Subject || '')}" class="w-full rounded-lg border border-slate-300 bg-slate-50 p-2 text-xs font-semibold dark:border-slate-700 dark:bg-slate-800" />
+            <input type="text" readonly value="${escapeHtml(subject)}" class="w-full rounded-lg border border-slate-300 bg-slate-50 p-2 text-xs font-semibold dark:border-slate-700 dark:bg-slate-800" />
           </div>
           <div>
             <label class="font-bold text-xs block mb-1">Case Description (CRM Update)</label>
-            <textarea readonly rows="8" class="w-full rounded-lg border border-slate-300 bg-slate-50 p-2 text-xs font-mono leading-relaxed dark:border-slate-700 dark:bg-slate-800">${escapeHtml(f.Description || '')}</textarea>
+            <textarea readonly rows="8" class="w-full rounded-lg border border-slate-300 bg-slate-50 p-2 text-xs font-mono leading-relaxed dark:border-slate-700 dark:bg-slate-800">${escapeHtml(description)}</textarea>
           </div>
         </div>
       `;
@@ -562,42 +586,21 @@
     });
 
     if (tagsNav) tagsNav.hidden = tabId !== 'notes' || engineConnected;
-
-    if (tabId !== 'notes') {
-      if (engineConnected && artifactsLoaded) {
-        fetchAndRenderEngineArtifacts();
-      }
-    }
   }
 
   tabNotes.addEventListener('click', () => switchTab('notes'));
-  tabTranscript.addEventListener('click', () => {
-    switchTab('transcript');
-  });
-  tabReview.addEventListener('click', () => {
-    switchTab('review');
-  });
-  tabSalesforce.addEventListener('click', () => {
-    switchTab('salesforce');
-  });
+  tabTranscript.addEventListener('click', () => switchTab('transcript'));
+  tabReview.addEventListener('click', () => switchTab('review'));
+  tabSalesforce.addEventListener('click', () => switchTab('salesforce'));
 
   if (btnViewTranscript) {
-    btnViewTranscript.addEventListener('click', () => {
-      switchTab('transcript');
-      if (engineConnected) fetchAndRenderEngineArtifacts();
-    });
+    btnViewTranscript.addEventListener('click', () => switchTab('transcript'));
   }
   if (btnViewReview) {
-    btnViewReview.addEventListener('click', () => {
-      switchTab('review');
-      if (engineConnected) fetchAndRenderEngineArtifacts();
-    });
+    btnViewReview.addEventListener('click', () => switchTab('review'));
   }
   if (btnViewSf) {
-    btnViewSf.addEventListener('click', () => {
-      switchTab('salesforce');
-      if (engineConnected) fetchAndRenderEngineArtifacts();
-    });
+    btnViewSf.addEventListener('click', () => switchTab('salesforce'));
   }
 
   // ---------------------------------------------------------------- Demo & Copy Actions
@@ -607,28 +610,33 @@
       try {
         const res = await fetch(`${LOCAL_ENGINE_URL}/demo/load-sample`, { method: 'POST' });
         if (res.ok) {
-          await fetchAndRenderEngineArtifacts();
-          artifactsLoaded = true;
+          const resData = await res.json();
+          activeSessionId = resData.session_id || 'sample_real_call_demo';
+          activeSessionType = 'demo';
+          await fetchAndRenderEngineArtifacts(activeSessionId);
           switchTab('review');
-          showToast('Real 9-minute call sample loaded!');
+          showToast('Real 9-minute demo call loaded!');
           return;
         }
       } catch (e) {
-        console.warn('Local engine demo load failed, using embedded demo fallback:', e);
+        console.warn('Local engine demo load failed:', e);
       }
     }
 
-    // Client-side demo fallback (instant & works offline on Vercel without local backend)
+    // Client-side demo fallback ONLY when engine is offline and user explicitly clicked Demo Call
     try {
+      activeSessionId = 'demo_client_offline';
+      activeSessionType = 'demo';
       renderTranscript(DEMO_TRANSCRIPT_DATA);
       renderReview({
         markdown: DEMO_REVIEW_MARKDOWN,
         salesforce_draft: DEMO_SALESFORCE_PAYLOAD
       });
       reviewConfidence.textContent = 'Confidence: HIGH (80%)';
+      reviewConfidence.className = 'rounded-full bg-teal-100 px-2.5 py-0.5 text-[11px] font-semibold text-teal-800 dark:bg-teal-950 dark:text-teal-300 border border-teal-200 dark:border-teal-800';
       artifactsLoaded = true;
       switchTab('review');
-      showToast('Demo call sample loaded!');
+      showToast('Demo call sample loaded (offline mode)!');
     } catch (e) {
       showToast(`Error loading demo sample: ${e.message}`, 'Retry', () => loadDemoCall());
     }

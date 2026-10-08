@@ -98,6 +98,77 @@ class TestLocalEngineAPI(unittest.TestCase):
         self.assertIn("salesforce_draft", data)
         self.assertEqual(data["salesforce_draft"]["action"], "DRAFT_UPDATE")
 
+    def test_session_provenance_and_live_marker(self):
+        # 1. Set active session with live session marker
+        live_id = "live_session_8472"
+        marker = "LIVE SESSION TEST 8472"
+        session_manager.session_id = live_id
+        session_manager.session_type = "live"
+        session_manager.state = "ready"
+        session_manager.stage = "ready"
+        session_manager.stage_label = "Ready"
+
+        # Write mock live session artifacts into output_dir
+        out_dir = session_manager.output_dir
+        out_dir.mkdir(parents=True, exist_ok=True)
+        transcript_data = {
+            "session_id": live_id,
+            "session_type": "live",
+            "merged_turns": [
+                {"speaker": "CONSULTANT", "text": f"Hello, {marker} starting."},
+                {"speaker": "CLIENT", "text": "Confirmed, received marker."}
+            ],
+            "total_turns": 2
+        }
+        (out_dir / "transcript.json").write_text(json.dumps(transcript_data), encoding="utf-8")
+        (out_dir / "transcript.txt").write_text(f"[CONSULTANT]: Hello, {marker} starting.\n[CLIENT]: Confirmed, received marker.\n", encoding="utf-8")
+        (out_dir / "analysis.json").write_text(json.dumps({
+            "session_id": live_id,
+            "session_type": "live",
+            "executive_summary": f"Live test run containing {marker}",
+            "resolution_status": "RESOLVED"
+        }), encoding="utf-8")
+        (out_dir / "analysis_review.md").write_text(f"# Review for {marker}\n\nResolved successfully.", encoding="utf-8")
+        (out_dir / "salesforce_draft_payload.json").write_text(json.dumps({
+            "action": "CREATE_CASE",
+            "subject": f"Live Call - {marker}",
+            "description": f"Notes for {marker}"
+        }), encoding="utf-8")
+
+        # 2. Verify endpoints return correct live session data with matching session_id
+        t_res = self.client.get(f"/transcript?session_id={live_id}")
+        self.assertEqual(t_res.status_code, 200)
+        t_json = t_res.json()
+        self.assertEqual(t_json["session_id"], live_id)
+        self.assertEqual(t_json["session_type"], "live")
+        self.assertIn(marker, t_json["formatted_text"])
+
+        a_res = self.client.get(f"/analysis?session_id={live_id}")
+        self.assertEqual(a_res.status_code, 200)
+        a_json = a_res.json()
+        self.assertEqual(a_json["session_id"], live_id)
+        self.assertEqual(a_json["session_type"], "live")
+        self.assertIn(marker, a_json["data"]["executive_summary"])
+
+        r_res = self.client.get(f"/review?session_id={live_id}")
+        self.assertEqual(r_res.status_code, 200)
+        r_json = r_res.json()
+        self.assertEqual(r_json["session_id"], live_id)
+        self.assertEqual(r_json["session_type"], "live")
+        self.assertIn(marker, r_json["markdown"])
+        self.assertIn(marker, r_json["salesforce_draft"]["subject"])
+
+        # 3. Verify mismatched session_id returns 404
+        bad_res = self.client.get("/transcript?session_id=mismatched_session_999")
+        self.assertEqual(bad_res.status_code, 404)
+
+        bad_a_res = self.client.get("/analysis?session_id=mismatched_session_999")
+        self.assertEqual(bad_a_res.status_code, 404)
+
+        bad_r_res = self.client.get("/review?session_id=mismatched_session_999")
+        self.assertEqual(bad_r_res.status_code, 404)
+
 
 if __name__ == "__main__":
     unittest.main()
+

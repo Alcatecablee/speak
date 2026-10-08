@@ -38,6 +38,8 @@ class SessionManager:
         self.stage_label: str = "Idle"
         self.message: str = "Ready for call capture"
         self.session_id: Optional[str] = None
+        self.session_type: str = "none"  # "live", "demo", "none"
+        self._active_session_data: Dict[str, Any] = {}
         self.error_message: Optional[str] = None
         self.start_time: Optional[float] = None
         self.processing_start_time: Optional[float] = None
@@ -91,6 +93,7 @@ class SessionManager:
                 "elapsed_seconds": int(elapsed),
                 "completed_stages": list(self.completed_stages),
                 "session_id": self.session_id,
+                "session_type": self.session_type,
                 "error": self.error_message,
                 "has_transcript": transcript_json_path.exists(),
                 "has_analysis": analysis_json_path.exists(),
@@ -105,6 +108,8 @@ class SessionManager:
                 raise RuntimeError(f"Engine is already in '{self.state}' state.")
 
             self.session_id = f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
+            self.session_type = "live"
+            self._active_session_data = {"session_id": self.session_id, "session_type": "live"}
             self.error_message = None
             self.start_time = time.time()
             self.processing_start_time = None
@@ -346,6 +351,8 @@ class SessionManager:
                 raise FileNotFoundError("Sample transcript.json not found.")
 
             self.session_id = "sample_real_call_demo"
+            self.session_type = "demo"
+            self._active_session_data = {"session_id": self.session_id, "session_type": "demo"}
             self.state = "ready"
             self.stage = "ready"
             self.error_message = None
@@ -360,5 +367,78 @@ class SessionManager:
                 "status": "ready",
                 "stage": "ready",
                 "session_id": self.session_id,
+                "session_type": "demo",
                 "message": "Demo sample loaded successfully."
+            }
+
+    def get_transcript_data(self, session_id: Optional[str] = None) -> Dict[str, Any]:
+        """Returns transcript for the active session, validating session_id if provided."""
+        with self._lock:
+            if session_id and self.session_id and session_id != self.session_id:
+                raise KeyError(f"Requested session '{session_id}' does not match active session '{self.session_id}'.")
+
+            json_path = self.output_dir / "transcript.json"
+            txt_path = self.output_dir / "transcript.txt"
+
+            if not json_path.exists():
+                raise FileNotFoundError("No transcript found. Record a call first.")
+
+            with open(json_path, "r", encoding="utf-8") as f:
+                transcript_json = json.load(f)
+
+            raw_text = txt_path.read_text(encoding="utf-8") if txt_path.exists() else ""
+
+            return {
+                "status": "success",
+                "session_id": self.session_id,
+                "session_type": self.session_type,
+                "data": transcript_json,
+                "formatted_text": raw_text
+            }
+
+    def get_analysis_data(self, session_id: Optional[str] = None) -> Dict[str, Any]:
+        """Returns analysis JSON for the active session, validating session_id if provided."""
+        with self._lock:
+            if session_id and self.session_id and session_id != self.session_id:
+                raise KeyError(f"Requested session '{session_id}' does not match active session '{self.session_id}'.")
+
+            analysis_path = self.output_dir / "analysis.json"
+            if not analysis_path.exists():
+                raise FileNotFoundError("No analysis found. Record a call first.")
+
+            with open(analysis_path, "r", encoding="utf-8") as f:
+                analysis_json = json.load(f)
+
+            return {
+                "status": "success",
+                "session_id": self.session_id,
+                "session_type": self.session_type,
+                "data": analysis_json
+            }
+
+    def get_review_data(self, session_id: Optional[str] = None) -> Dict[str, Any]:
+        """Returns review markdown and draft Salesforce payload for the active session."""
+        with self._lock:
+            if session_id and self.session_id and session_id != self.session_id:
+                raise KeyError(f"Requested session '{session_id}' does not match active session '{self.session_id}'.")
+
+            review_path = self.output_dir / "analysis_review.md"
+            sf_path = self.output_dir / "salesforce_draft_payload.json"
+
+            if not review_path.exists():
+                raise FileNotFoundError("No review document found. Record a call first.")
+
+            markdown_text = review_path.read_text(encoding="utf-8")
+
+            sf_payload = {}
+            if sf_path.exists():
+                with open(sf_path, "r", encoding="utf-8") as f:
+                    sf_payload = json.load(f)
+
+            return {
+                "status": "success",
+                "session_id": self.session_id,
+                "session_type": self.session_type,
+                "markdown": markdown_text,
+                "salesforce_draft": sf_payload
             }
