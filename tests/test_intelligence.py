@@ -312,12 +312,21 @@ class TestHardenedIntelligence(unittest.TestCase):
             desc = sf["fields"]["Description"]
             self.assertIsInstance(desc, str)
             self.assertGreater(len(desc), 150)
-            # Must cover key elements
+            # Must cover key elements with first-person consultant perspective
             self.assertTrue(desc.lower().startswith("the client"))
             self.assertIn("production batch variance", desc.lower())
             self.assertIn("cheesecake", desc.lower())
             self.assertIn("15 minutes", desc.lower())
             self.assertIn("follow-up remains outstanding", desc.lower())
+            self.assertIn("i connected", desc.lower())
+            self.assertIn("i agreed", desc.lower())
+            # Must NOT refer to author in third person
+            self.assertNotIn("the consultant connected", desc.lower())
+            self.assertNotIn("the consultant diagnosed", desc.lower())
+            self.assertNotIn("the consultant agreed", desc.lower())
+            self.assertNotIn("the consultant", desc.lower())
+            self.assertNotIn("the agent", desc.lower())
+            self.assertNotIn("the support representative", desc.lower())
             # Must NOT contain bullet points or point-form notes
             self.assertNotIn("\n- ", desc)
             self.assertNotIn("\n* ", desc)
@@ -347,14 +356,21 @@ class TestHardenedIntelligence(unittest.TestCase):
         summary_prose = generate_narrative_case_summary(analysis)
         payload = format_draft_salesforce_payload(analysis)
 
-        # 1. Check narrative prose structure
+        # 1. Check narrative prose structure & first-person perspective
         self.assertTrue(summary_prose.startswith("The client"))
         self.assertTrue(summary_prose.endswith("."))
         self.assertIn("variance", summary_prose.lower())
         self.assertIn("unit of measure", summary_prose.lower())
         self.assertIn("15 minutes", summary_prose.lower())
+        self.assertIn("i connected", summary_prose.lower())
+        self.assertIn("i agreed", summary_prose.lower())
 
-        # 2. Strict negative checks: No bullet points, numbered lists, section headers, or AI tags
+        # 2. Strict negative checks: No third-person consultant references
+        self.assertNotIn("the consultant", summary_prose.lower())
+        self.assertNotIn("the agent", summary_prose.lower())
+        self.assertNotIn("the support representative", summary_prose.lower())
+
+        # 3. Strict negative checks: No bullet points, numbered lists, section headers, or AI tags
         self.assertNotIn("- ", summary_prose)
         self.assertNotIn("* ", summary_prose)
         self.assertNotIn("PRIMARY ISSUE", summary_prose)
@@ -365,7 +381,7 @@ class TestHardenedIntelligence(unittest.TestCase):
         self.assertNotIn("[CONFIRMED_COMMITMENT]", summary_prose)
         self.assertNotIn("[DRAFT CASE RECORD", summary_prose)
 
-        # 3. Payload integrity
+        # 4. Payload integrity
         self.assertEqual(payload["fields"]["Description"], summary_prose)
         self.assertEqual(payload["fields"]["Status"], "Pending Follow-up")
         self.assertEqual(payload["sobject"], "Case")

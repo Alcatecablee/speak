@@ -102,8 +102,9 @@ def format_markdown_review(analysis: ConversationAnalysis) -> str:
 def generate_narrative_case_summary(analysis: ConversationAnalysis) -> str:
     """
     Generates a complete, professional narrative case history from the structured analysis.
-    Written as cohesive, natural prose suitable for direct entry into Salesforce.
-    Contains no bullet points, numbered lists, section headers, label blocks, or AI tags.
+    Written in the first person from the perspective of the consultant handling the case.
+    Does NOT use bullet points, numbered lists, section headers, label blocks, or AI tags.
+    Does NOT refer to the consultant in the third person.
     """
     sentences = []
 
@@ -134,9 +135,9 @@ def generate_narrative_case_summary(analysis: ConversationAnalysis) -> str:
     # Remote connection check
     if analysis.entities.customer_identifiers:
         remote_id = analysis.entities.customer_identifiers[0]
-        actions_prose.append(f"the consultant connected remotely to the client's workstation (Remote ID: {remote_id})")
+        actions_prose.append(f"I connected remotely to the client's workstation (Remote ID: {remote_id})")
     elif any("remote" in (a.description or "").lower() for a in analysis.actions_taken.structured_actions):
-        actions_prose.append("the consultant connected remotely to the client's workstation")
+        actions_prose.append("I connected remotely to the client's workstation")
 
     # Structured actions processing
     for act in analysis.actions_taken.structured_actions:
@@ -150,7 +151,7 @@ def generate_narrative_case_summary(analysis: ConversationAnalysis) -> str:
         actor_val = act.actor.value if hasattr(act.actor, "value") else str(act.actor)
         act_type_val = act.action_type.value if hasattr(act.action_type, "value") else str(act.action_type)
 
-        # Normalize text to avoid "the consultant consultant diagnosed..."
+        # Clean prefix
         clean_desc = desc
         for prefix in ("consultant ", "client ", "the consultant ", "the client "):
             if clean_desc.lower().startswith(prefix):
@@ -164,20 +165,20 @@ def generate_narrative_case_summary(analysis: ConversationAnalysis) -> str:
                 actions_prose.append(f"the client {clean_desc[0].lower() + clean_desc[1:]}")
         elif act_type_val == "COMPLETED_ACTION" and actor_val == "CONSULTANT":
             if not any(clean_desc.lower() in p.lower() for p in actions_prose):
-                actions_prose.append(f"the consultant {clean_desc[0].lower() + clean_desc[1:]}")
+                actions_prose.append(f"I {clean_desc[0].lower() + clean_desc[1:]}")
         elif act_type_val == "PROPOSED_ACTION":
             if "escalation" in clean_desc.lower():
-                actions_prose.append("the consultant noted potential escalation to software support if configuration adjustments do not resolve the issue")
+                actions_prose.append("I noted potential escalation to software support if configuration adjustments do not resolve the issue")
             elif not any(clean_desc.lower() in p.lower() for p in actions_prose):
-                actions_prose.append(f"the consultant proposed {clean_desc[0].lower() + clean_desc[1:]}")
+                actions_prose.append(f"I proposed {clean_desc[0].lower() + clean_desc[1:]}")
 
     if actions_prose:
         if len(actions_prose) == 1:
-            sentences.append(f"During the session, {actions_prose[0]}.")
+            sentences.append(f"{actions_prose[0][0].upper() + actions_prose[0][1:]}.")
         elif len(actions_prose) == 2:
-            sentences.append(f"During the session, {actions_prose[0]}, and {actions_prose[1]}.")
+            sentences.append(f"{actions_prose[0][0].upper() + actions_prose[0][1:]}, and {actions_prose[1]}.")
         else:
-            first_clause = f"During the session, {actions_prose[0]}, and {actions_prose[1]}."
+            first_clause = f"{actions_prose[0][0].upper() + actions_prose[0][1:]}, and {actions_prose[1]}."
             sentences.append(first_clause)
             for p in actions_prose[2:]:
                 p_clean = p[0].upper() + p[1:]
@@ -202,13 +203,16 @@ def generate_narrative_case_summary(analysis: ConversationAnalysis) -> str:
 
         items = ", ".join(analysis.follow_up.action_items) if analysis.follow_up.action_items else "investigate the configuration"
         owner_val = analysis.follow_up.owner.value if hasattr(analysis.follow_up.owner, "value") else str(analysis.follow_up.owner)
-        owner_name = "The consultant" if owner_val == "CONSULTANT" else "The client"
+        owner_name = "I" if owner_val == "CONSULTANT" else "The client"
         
         clean_items = items.rstrip(".")
-        if clean_items.lower().startswith("consultant to "):
-            clean_items = clean_items[14:]
-        elif clean_items.lower().startswith("client to "):
-            clean_items = clean_items[10:]
+        for prefix in ("consultant to ", "client to ", "consultant ", "client "):
+            if clean_items.lower().startswith(prefix):
+                clean_items = clean_items[len(prefix):]
+                break
+
+        if "call client back" in clean_items:
+            clean_items = clean_items.replace("call client back", "call the client back")
             
         if "with update" in clean_items.lower() or "with fix" in clean_items.lower() or "an update" in clean_items.lower():
             sentences.append(f"{owner_name} agreed to {clean_items}{tf_clause}.")
@@ -217,6 +221,10 @@ def generate_narrative_case_summary(analysis: ConversationAnalysis) -> str:
     elif analysis.summary.outcome:
         out = analysis.summary.outcome.strip()
         if out:
+            for pfx in ("The consultant agreed to ", "Consultant agreed to "):
+                if out.startswith(pfx):
+                    out = "I agreed to " + out[len(pfx):]
+                    break
             sentences.append(out if out.endswith(".") else out + ".")
 
     # 5. Clear Resolution Status
