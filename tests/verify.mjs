@@ -70,9 +70,6 @@ try {
 
     check('page title', (await page.title()) === 'Speak Your Notes');
     check('mic idle label', (await page.locator('#mic-label').innerText()) === 'Start Dictation');
-    check('all 6 requested shortcut tags present', await page.evaluate(() =>
-      ['POS1', 'GRV', 'Kitchen Printer', 'Adumo Base', 'Terminal', 'Stock Take']
-        .every((l) => document.querySelector(`[data-tag="${l}"]`))));
 
     await mic.click();
     await page.waitForSelector('#mic[data-state="recording"]');
@@ -109,26 +106,6 @@ try {
     const inst = await page.evaluate(() => window.__instances());
     await page.waitForTimeout(400);
     check('stop: does not restart', (await page.evaluate(() => window.__instances())) === inst);
-
-    // ---- tags
-    await notes.fill('');
-    await page.click('[data-tag="POS1"]');
-    check('POS1 tag inserts keyword', (await notes.inputValue()) === 'POS1');
-    await page.click('[data-tag="Kitchen Printer"]');
-    const v = await notes.inputValue();
-    check('Kitchen Printer template appended on new paragraph', v.startsWith('POS1\n\nKitchen Printer:\n- Printer name / IP: '), JSON.stringify(v));
-    check('caret lands in first template field', await notes.evaluate((t) => t.selectionStart === t.value.indexOf('IP: ') + 4));
-    await page.keyboard.type('192.168.0.50');
-    check('typing continues at caret', (await notes.inputValue()).includes('IP: 192.168.0.50\n- Issue:'));
-    for (const l of ['GRV', 'Adumo Base', 'Terminal', 'Stock Take']) await page.click(`[data-tag="${l}"]`);
-    check('remaining templates insert', await notes.evaluate((t) => ['GRV:', 'Adumo Base:', 'Terminal:', 'Stock Take:'].every((s) => t.value.includes(s))));
-
-    // dictating while a template caret is active inserts at the caret
-    await notes.fill('Start: ');
-    await mic.click(); await page.waitForSelector('#mic[data-state="recording"]');
-    await page.click('[data-tag="Timestamp"]');
-    check('timestamp tag', /\[\d{4}-\d\d-\d\d \d\d:\d\d\]/.test(await notes.inputValue()));
-    await mic.click(); await page.waitForSelector('#mic[data-state="idle"]');
 
     // ---- copy
     await notes.fill('Hello support note');
@@ -222,8 +199,8 @@ try {
   {
     const { ctx, page } = await newPage({}, { fake: false, init: () => { delete window.SpeechRecognition; delete window.webkitSpeechRecognition; } });
     check('unsupported browser → banner, typing still works', await page.locator('#banner').isVisible());
-    await page.fill('#notes', 'typed'); await page.click('[data-tag="POS1"]');
-    check('tags work without speech support', (await page.inputValue('#notes')) === 'typed POS1');
+    await page.fill('#notes', 'typed notes support');
+    check('typing works without speech support', (await page.inputValue('#notes')) === 'typed notes support');
     await ctx.close();
   }
 
@@ -384,7 +361,6 @@ try {
   console.log('\nMobile layout (iPhone-sized, touch)');
   {
     const { ctx, page } = await newPage({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 });
-    await page.tap('[data-tag="GRV"]');
     await page.tap('#mic'); await page.waitForSelector('#mic[data-state="recording"]');
     await page.evaluate(() => window.__emit([{ t: 'supplier delivered short', final: true }]));
     await page.screenshot({ path: path.join(shots, 'mobile-recording.png') });

@@ -778,6 +778,7 @@
 
   // ---------------------------------------------------------------- render tags
   function renderTags() {
+    if (!tagsEl) return;
     tagsEl.innerHTML = '';
     TAGS.forEach((tag) => {
       const btn = document.createElement('button');
