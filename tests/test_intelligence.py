@@ -311,15 +311,22 @@ class TestHardenedIntelligence(unittest.TestCase):
             # Narrative format validation
             desc = sf["fields"]["Description"]
             self.assertIsInstance(desc, str)
-            self.assertGreater(len(desc), 150)
-            # Must cover key elements with first-person consultant perspective
-            self.assertTrue(desc.lower().startswith("the client"))
-            self.assertIn("production batch variance", desc.lower())
+            self.assertGreater(len(desc), 100)
+            # Must cover key elements with concise first-person consultant perspective
+            self.assertTrue(desc.startswith("Logged a case") or desc.startswith("I logged a case"))
             self.assertIn("cheesecake", desc.lower())
             self.assertIn("15 minutes", desc.lower())
-            self.assertIn("follow-up remains outstanding", desc.lower())
-            self.assertIn("i connected", desc.lower())
-            self.assertIn("i agreed", desc.lower())
+            self.assertIn("issue not resolved yet", desc.lower())
+            self.assertIn("i dialed in", desc.lower())
+            self.assertIn("i will", desc.lower())
+            # Must NOT use unnecessarily formal prose
+            self.assertNotIn("the client contacted support", desc.lower())
+            self.assertNotIn("the client requested assistance", desc.lower())
+            self.assertNotIn("connected remotely to the client's workstation", desc.lower())
+            self.assertNotIn("during the session", desc.lower())
+            self.assertNotIn("the interaction", desc.lower())
+            self.assertNotIn("configuration mismatch", desc.lower())
+            self.assertNotIn("remains outstanding", desc.lower())
             # Must NOT refer to author in third person
             self.assertNotIn("the consultant connected", desc.lower())
             self.assertNotIn("the consultant diagnosed", desc.lower())
@@ -356,19 +363,27 @@ class TestHardenedIntelligence(unittest.TestCase):
         summary_prose = generate_narrative_case_summary(analysis)
         payload = format_draft_salesforce_payload(analysis)
 
-        # 1. Check narrative prose structure & first-person perspective
-        self.assertTrue(summary_prose.startswith("The client"))
+        # 1. Check narrative prose structure & concise first-person perspective
+        self.assertTrue(summary_prose.startswith("Logged a case") or summary_prose.startswith("I logged a case"))
         self.assertTrue(summary_prose.endswith("."))
         self.assertIn("variance", summary_prose.lower())
-        self.assertIn("unit of measure", summary_prose.lower())
+        self.assertIn("cheesecake", summary_prose.lower())
         self.assertIn("15 minutes", summary_prose.lower())
-        self.assertIn("i connected", summary_prose.lower())
-        self.assertIn("i agreed", summary_prose.lower())
+        self.assertIn("i dialed in", summary_prose.lower())
+        self.assertIn("i will", summary_prose.lower())
+        self.assertIn("issue not resolved yet", summary_prose.lower())
 
-        # 2. Strict negative checks: No third-person consultant references
+        # 2. Strict negative checks: No third-person consultant references or formal fluff
+        self.assertNotIn("the client contacted support", summary_prose.lower())
+        self.assertNotIn("the client requested assistance", summary_prose.lower())
+        self.assertNotIn("connected remotely to the client's workstation", summary_prose.lower())
         self.assertNotIn("the consultant", summary_prose.lower())
         self.assertNotIn("the agent", summary_prose.lower())
         self.assertNotIn("the support representative", summary_prose.lower())
+        self.assertNotIn("during the session", summary_prose.lower())
+        self.assertNotIn("the interaction", summary_prose.lower())
+        self.assertNotIn("configuration mismatch", summary_prose.lower())
+        self.assertNotIn("remains outstanding", summary_prose.lower())
 
         # 3. Strict negative checks: No bullet points, numbered lists, section headers, or AI tags
         self.assertNotIn("- ", summary_prose)

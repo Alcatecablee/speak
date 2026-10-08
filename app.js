@@ -143,7 +143,7 @@
     requires_consultant_confirmation: true,
     fields: {
       Subject: "Production Recipe Variance - 20288 2622 2622",
-      Description: "The client contacted support regarding production batch variance discrepancies (cheesecake slices vs whole unit) and butternut puree unit configuration. I connected remotely to the client's workstation (Remote ID: 20288 2622 2622), and the client demonstrated the variance calculation on screen with test values. I diagnosed a unit of measure configuration mismatch in the production module. I noted potential escalation to software support if configuration adjustments do not resolve the issue. The client also requested assistance with configuring the butternut puree item in 1 kg units. I agreed to investigate the cheesecake recipe configuration and call the client back within 15 minutes with an update. The issues were not confirmed as fully resolved during the interaction, and follow-up remains outstanding.",
+      Description: "Logged a case for a production variance issue on the cheesecake recipe. I dialed in to MC1 and checked the recipe setup. The system was using the whole cheesecake instead of individual slices. The client also asked for Butternut Puree to be set to 1 KG. I will check the recipe setup and call the client back within 15 minutes. Issue not resolved yet.",
       Status: "Pending Follow-up",
       Resolution_Category__c: "Production Configuration",
       Remote_Connection_ID__c: "20288 2622 2622",
