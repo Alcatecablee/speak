@@ -300,13 +300,76 @@ class TestHardenedIntelligence(unittest.TestCase):
             self.assertEqual(analysis.follow_up.owner, ActorRole.CONSULTANT)
             self.assertIn("15 minutes", (analysis.follow_up.timeframe or "").lower())
 
-            # Check draft Salesforce payload boundary
+            # Check draft Salesforce payload boundary & narrative formatting
             salesforce_payload = Path(tmpdir) / "salesforce_draft_payload.json"
             with open(salesforce_payload, "r", encoding="utf-8") as f:
                 sf = json.load(f)
             self.assertEqual(sf["action"], "DRAFT_UPDATE")
             self.assertTrue(sf["requires_consultant_confirmation"])
             self.assertEqual(sf["human_review_status"], "PENDING_CONSULTANT_APPROVAL")
+
+            # Narrative format validation
+            desc = sf["fields"]["Description"]
+            self.assertIsInstance(desc, str)
+            self.assertGreater(len(desc), 150)
+            # Must cover key elements
+            self.assertTrue(desc.lower().startswith("the client"))
+            self.assertIn("production batch variance", desc.lower())
+            self.assertIn("cheesecake", desc.lower())
+            self.assertIn("15 minutes", desc.lower())
+            self.assertIn("follow-up remains outstanding", desc.lower())
+            # Must NOT contain bullet points or point-form notes
+            self.assertNotIn("\n- ", desc)
+            self.assertNotIn("\n* ", desc)
+            # Must NOT contain section headers or label blocks
+            self.assertNotIn("PRIMARY ISSUE:", desc)
+            self.assertNotIn("CONFIRMED ACTIONS", desc)
+            self.assertNotIn("REASON FOR CONTACT:", desc)
+            self.assertNotIn("FOLLOW UP REQUIRED:", desc)
+            self.assertNotIn("RESOLUTION STATUS:", desc)
+            # Must NOT contain AI action classification tags
+            self.assertNotIn("[COMPLETED_ACTION]", desc)
+            self.assertNotIn("[PROPOSED_ACTION]", desc)
+            self.assertNotIn("[CONFIRMED_COMMITMENT]", desc)
+
+    # TEST 20: Narrative Case Summary Prose Generation
+    def test_20_salesforce_narrative_case_summary_format(self):
+        from intelligence.formatter import generate_narrative_case_summary, format_draft_salesforce_payload
+        sample_path = Path("recordings/demo_sample_transcript.json")
+        real_transcript_path = sample_path if sample_path.exists() else Path("recordings/transcript.json")
+        if not real_transcript_path.exists():
+            self.skipTest("Transcript benchmark fixture not present on disk")
+
+        with open(real_transcript_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        analysis = self.provider.analyze(data)
+        summary_prose = generate_narrative_case_summary(analysis)
+        payload = format_draft_salesforce_payload(analysis)
+
+        # 1. Check narrative prose structure
+        self.assertTrue(summary_prose.startswith("The client"))
+        self.assertTrue(summary_prose.endswith("."))
+        self.assertIn("variance", summary_prose.lower())
+        self.assertIn("unit of measure", summary_prose.lower())
+        self.assertIn("15 minutes", summary_prose.lower())
+
+        # 2. Strict negative checks: No bullet points, numbered lists, section headers, or AI tags
+        self.assertNotIn("- ", summary_prose)
+        self.assertNotIn("* ", summary_prose)
+        self.assertNotIn("PRIMARY ISSUE", summary_prose)
+        self.assertNotIn("CONFIRMED ACTIONS", summary_prose)
+        self.assertNotIn("FOLLOW UP REQUIRED:", summary_prose)
+        self.assertNotIn("[COMPLETED_ACTION]", summary_prose)
+        self.assertNotIn("[PROPOSED_ACTION]", summary_prose)
+        self.assertNotIn("[CONFIRMED_COMMITMENT]", summary_prose)
+        self.assertNotIn("[DRAFT CASE RECORD", summary_prose)
+
+        # 3. Payload integrity
+        self.assertEqual(payload["fields"]["Description"], summary_prose)
+        self.assertEqual(payload["fields"]["Status"], "Pending Follow-up")
+        self.assertEqual(payload["sobject"], "Case")
+        self.assertEqual(payload["action"], "DRAFT_UPDATE")
 
 
 if __name__ == "__main__":
