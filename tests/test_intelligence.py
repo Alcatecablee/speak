@@ -193,7 +193,7 @@ class TestHardenedIntelligence(unittest.TestCase):
         # Must gracefully fall back to GroundedExtractionProvider rather than crashing
         result = llm_provider.analyze(sample_data)
         self.assertIsInstance(result, ConversationAnalysis)
-        self.assertEqual(result.schema_version, "2.1.0")
+        self.assertEqual(result.schema_version, "2.2.0")
 
     # TEST 14: LLM returns invalid enum values
     def test_14_llm_invalid_enum_fallback(self):
