@@ -6,3 +6,4 @@ __pycache__/
 *.pyc
 recordings/
 recordings_preserved/
+tests/.output_screenshots/

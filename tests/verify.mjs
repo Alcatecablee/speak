@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { createServer } from '../dev-server.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const shots = path.join(root, 'tests', 'screenshots');
+const shots = process.env.SCREENSHOTS_DIR || path.join(root, 'tests', '.output_screenshots');
 fs.mkdirSync(shots, { recursive: true });
 
 const server = createServer();
