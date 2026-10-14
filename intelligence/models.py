@@ -322,7 +322,7 @@ class ConfidenceAssessment(BaseModel):
 
 class ConversationAnalysis(BaseModel):
     """Complete, structured conversation intelligence record."""
-    schema_version: str = Field(default="2.1.0", description="Schema version.")
+    schema_version: str = Field(default="2.2.0", description="Schema version.")
     call_start_time: Optional[str] = Field(default=None, description="Original call start timestamp.")
     total_turns_analyzed: int = Field(description="Total speaker turns processed.")
     
@@ -383,6 +383,22 @@ class ConversationAnalysis(BaseModel):
     @classmethod
     def sync_technical_resolution(cls, data: Any) -> Any:
         if isinstance(data, dict):
+            # 1. Resolve technical_resolution_status if not explicitly provided
             if "technical_resolution_status" not in data and "resolution_status" in data:
-                data["technical_resolution_status"] = data["resolution_status"]
+                raw_status = data["resolution_status"]
+                if raw_status in (ResolutionStatus.FOLLOW_UP_REQUIRED, "FOLLOW_UP_REQUIRED"):
+                    data["technical_resolution_status"] = ResolutionStatus.UNKNOWN
+                    reasons = list(data.get("outcome_reasons") or [])
+                    if "LEGACY_PAYLOAD_INSUFFICIENT_TECHNICAL_STATUS" not in reasons:
+                        reasons.append("LEGACY_PAYLOAD_INSUFFICIENT_TECHNICAL_STATUS")
+                    data["outcome_reasons"] = reasons
+                else:
+                    data["technical_resolution_status"] = raw_status
+            elif data.get("technical_resolution_status") in (ResolutionStatus.FOLLOW_UP_REQUIRED, "FOLLOW_UP_REQUIRED"):
+                # Canonical technical status can NEVER be FOLLOW_UP_REQUIRED
+                data["technical_resolution_status"] = ResolutionStatus.UNKNOWN
+                reasons = list(data.get("outcome_reasons") or [])
+                if "LEGACY_PAYLOAD_INSUFFICIENT_TECHNICAL_STATUS" not in reasons:
+                    reasons.append("LEGACY_PAYLOAD_INSUFFICIENT_TECHNICAL_STATUS")
+                data["outcome_reasons"] = reasons
         return data

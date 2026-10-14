@@ -248,6 +248,74 @@ class TestModelSchemaCompatibility(unittest.TestCase):
         # Authoritative technical status remains UNRESOLVED!
         self.assertEqual(analysis.technical_resolution_status, ResolutionStatus.UNRESOLVED)
 
+    def test_legacy_follow_up_required_maps_to_unknown_technical_status(self):
+        """A legacy payload with resolution_status=FOLLOW_UP_REQUIRED never maps to canonical technical status."""
+        payload = {
+            "schema_version": "2.1.0",
+            "total_turns_analyzed": 2,
+            "summary": {"reason_for_contact": "Test", "outcome": "Callback scheduled"},
+            "client_issue": {"primary_issue": "Test"},
+            "actions_taken": {"structured_actions": []},
+            "resolution_status": "FOLLOW_UP_REQUIRED",
+            "follow_up": {"required": True, "action_items": ["Call back tomorrow"]},
+            "entities": {},
+            "sentiment": {"sentiment": "NEUTRAL", "rationale": "Test"},
+            "confidence": {"level": "HIGH", "score": 1.0, "review_notes": "Test"}
+        }
+        analysis = ConversationAnalysis.model_validate(payload)
+        self.assertEqual(analysis.resolution_status, ResolutionStatus.FOLLOW_UP_REQUIRED)
+        # Canonical technical status MUST be UNKNOWN
+        self.assertEqual(analysis.technical_resolution_status, ResolutionStatus.UNKNOWN)
+        # Must record that the legacy payload did not supply sufficient technical outcome information
+        self.assertIn("LEGACY_PAYLOAD_INSUFFICIENT_TECHNICAL_STATUS", analysis.outcome_reasons)
+
+    def test_canonical_status_rejects_direct_follow_up_required(self):
+        """technical_resolution_status directly passed as FOLLOW_UP_REQUIRED is normalized to UNKNOWN."""
+        payload = {
+            "total_turns_analyzed": 1,
+            "summary": {"reason_for_contact": "Test", "outcome": "Pending"},
+            "client_issue": {"primary_issue": "Test"},
+            "actions_taken": {"structured_actions": []},
+            "resolution_status": "FOLLOW_UP_REQUIRED",
+            "technical_resolution_status": "FOLLOW_UP_REQUIRED",
+            "follow_up": {"required": True, "action_items": []},
+            "entities": {},
+            "sentiment": {"sentiment": "NEUTRAL", "rationale": "Test"},
+            "confidence": {"level": "HIGH", "score": 1.0, "review_notes": "Test"}
+        }
+        analysis = ConversationAnalysis.model_validate(payload)
+        self.assertEqual(analysis.technical_resolution_status, ResolutionStatus.UNKNOWN)
+        self.assertIn("LEGACY_PAYLOAD_INSUFFICIENT_TECHNICAL_STATUS", analysis.outcome_reasons)
+
+    def test_schema_version_contract(self):
+        """New models emit schema_version 2.2.0 while older versions (2.0.0, 2.1.0) are preserved."""
+        base_payload = {
+            "total_turns_analyzed": 1,
+            "summary": {"reason_for_contact": "Test", "outcome": "Done"},
+            "client_issue": {"primary_issue": "Test"},
+            "actions_taken": {"structured_actions": []},
+            "resolution_status": "RESOLVED",
+            "follow_up": {"required": False, "action_items": []},
+            "entities": {},
+            "sentiment": {"sentiment": "NEUTRAL", "rationale": "Test"},
+            "confidence": {"level": "HIGH", "score": 1.0, "review_notes": "Test"}
+        }
+        
+        # Omitted schema_version defaults to new 2.2.0 contract
+        new_analysis = ConversationAnalysis.model_validate(base_payload)
+        self.assertEqual(new_analysis.schema_version, "2.2.0")
+
+        # Older schema_version 2.1.0 is preserved
+        p_210 = dict(base_payload, schema_version="2.1.0")
+        analysis_210 = ConversationAnalysis.model_validate(p_210)
+        self.assertEqual(analysis_210.schema_version, "2.1.0")
+
+        # Older schema_version 2.0.0 is preserved
+        p_200 = dict(base_payload, schema_version="2.0.0")
+        analysis_200 = ConversationAnalysis.model_validate(p_200)
+        self.assertEqual(analysis_200.schema_version, "2.0.0")
+
 
 if __name__ == "__main__":
     unittest.main()
+
