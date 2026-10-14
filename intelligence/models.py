@@ -5,7 +5,7 @@ Enforces epistemic status, evidence binding, and action classification.
 """
 
 from enum import Enum
-from typing import List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from pydantic import BaseModel, Field, model_validator
 
 
@@ -62,6 +62,102 @@ class EpistemicType(str, Enum):
     UNVERIFIED = "UNVERIFIED"
 
 
+# --- Phase 3 Additive Enums ---
+
+class ClaimType(str, Enum):
+    """Semantic category of an extracted dialogue claim."""
+    FAILURE_ASSERTION = "FAILURE_ASSERTION"
+    RESOLUTION_ASSERTION = "RESOLUTION_ASSERTION"
+    DIAGNOSTIC_ACTION = "DIAGNOSTIC_ACTION"
+    REMEDIAL_ACTION = "REMEDIAL_ACTION"
+    ESCALATION_DISPATCH = "ESCALATION_DISPATCH"
+    COMMITMENT = "COMMITMENT"
+    CONNECTION_ESTABLISHED = "CONNECTION_ESTABLISHED"
+    OTHER_CONTEXT = "OTHER_CONTEXT"
+
+
+class Polarity(str, Enum):
+    """Grammatical affirmation or negation of the predicate in the clause."""
+    AFFIRMATIVE = "AFFIRMATIVE"
+    NEGATED = "NEGATED"
+    UNCERTAIN = "UNCERTAIN"
+
+
+class TemporalScope(str, Enum):
+    """Temporal frame described by the claim."""
+    PRESENT_OR_CURRENT = "PRESENT_OR_CURRENT"
+    RETROSPECTIVE_PAST = "RETROSPECTIVE_PAST"
+    PROSPECTIVE_FUTURE = "PROSPECTIVE_FUTURE"
+    UNSPECIFIED = "UNSPECIFIED"
+
+
+class LinkConfidence(str, Enum):
+    """Confidence level of linking an event to a target or operational issue."""
+    EXPLICIT = "EXPLICIT"
+    INFERRED_UNIQUE = "INFERRED_UNIQUE"
+    AMBIGUOUS = "AMBIGUOUS"
+    NONE = "NONE"
+
+
+class TargetKind(str, Enum):
+    """Classification of physical or logical equipment endpoints."""
+    POS_TERMINAL = "POS_TERMINAL"
+    PRINTER = "PRINTER"
+    PAYMENT_PED = "PAYMENT_PED"
+    NET_INFRA = "NET_INFRA"
+    SERVER_DB = "SERVER_DB"
+    OTHER = "OTHER"
+
+
+class ProblemCategory(str, Enum):
+    """Operational/technical category of a reported issue."""
+    CONNECTIVITY_LAN = "CONNECTIVITY_LAN"
+    PRINTING_HARDWARE = "PRINTING_HARDWARE"
+    CARD_PAYMENT_EFT = "CARD_PAYMENT_EFT"
+    DATABASE_BACKUP = "DATABASE_BACKUP"
+    RECIPE_PRODUCTION = "RECIPE_PRODUCTION"
+    CASHUP_BALANCING = "CASHUP_BALANCING"
+    LICENSE_SECURITY = "LICENSE_SECURITY"
+    GENERAL_SUPPORT = "GENERAL_SUPPORT"
+    UNKNOWN = "UNKNOWN"
+
+
+class IssueState(str, Enum):
+    """Lifecycle state of an individual operational issue."""
+    OPEN = "OPEN"
+    RESOLVED = "RESOLVED"
+    UNRESOLVED_CONFIRMED = "UNRESOLVED_CONFIRMED"
+    REVIEW = "REVIEW"
+
+
+class RemoteIdAnchor(str, Enum):
+    """Remote software anchor verifying a candidate connection identifier."""
+    ANYDESK = "ANYDESK"
+    TEAMVIEWER = "TEAMVIEWER"
+    GENERIC_REMOTE = "GENERIC_REMOTE"
+    POSITIONAL = "POSITIONAL"
+    NONE = "NONE"
+
+
+class RemoteIdStatus(str, Enum):
+    """Safety status of a remote connection identifier candidate."""
+    ACTIVE = "ACTIVE"
+    SUPERSEDED = "SUPERSEDED"
+    REJECTED = "REJECTED"
+    AMBIGUOUS = "AMBIGUOUS"
+
+
+# --- Structural Models ---
+
+class EvidenceSpan(BaseModel):
+    """Character-level span within transcript text for fine-grained provenance."""
+    turn_index: int = Field(description="0-indexed turn position in transcript.")
+    start_char: int = Field(description="Starting character offset in turn text.")
+    end_char: int = Field(description="Ending character offset in turn text.")
+    text: str = Field(description="Exact verbatim span text.")
+    role: str = Field(default="PRIMARY", description="Role of this span: PRIMARY, PIVOT, CONTRAST, TARGET_SUBJECT.")
+
+
 class EvidenceItem(BaseModel):
     """Immutable audit trail linking an extracted fact or claim to transcript source."""
     fact: str = Field(description="The extracted fact or claim.")
@@ -70,6 +166,70 @@ class EvidenceItem(BaseModel):
     timestamp: Optional[str] = Field(default=None, description="Timestamp string (HH:MM:SS) of the turn.")
     speaker: Optional[str] = Field(default=None, description="CONSULTANT or CLIENT.")
     source_quote: str = Field(description="Exact verbatim or near-verbatim quote from transcript supporting this fact.")
+    spans: List[EvidenceSpan] = Field(default_factory=list, description="Constituent character-level spans for compound evidence.")
+
+
+class TargetEntity(BaseModel):
+    """Physical device, till, peripheral, or network node identified in the conversation."""
+    target_id: str = Field(description="Unique identifier for this target (e.g. target_printer_kitchen).")
+    canonical_name: str = Field(description="Human-readable canonical target label.")
+    kind: TargetKind = Field(default=TargetKind.OTHER, description="Equipment classification.")
+    ordinal: Optional[int] = Field(default=None, description="Device ordinal if stated (e.g. 1 for Till 1).")
+    location: Optional[str] = Field(default=None, description="Physical location if stated (e.g. second floor, bar).")
+
+
+class OperationalIssue(BaseModel):
+    """Distinct technical or operational problem tracked independently across dialogue."""
+    issue_id: str = Field(description="Unique identifier for this issue (e.g. issue_pos1_sync).")
+    target_id: Optional[str] = Field(default=None, description="Target entity bound to this issue, if localized.")
+    category: ProblemCategory = Field(default=ProblemCategory.GENERAL_SUPPORT, description="Symptom/problem category.")
+    symptom_description: str = Field(default="", description="Concise symptom summary.")
+    current_state: IssueState = Field(default=IssueState.OPEN, description="Current lifecycle state of this issue.")
+    event_history_ids: List[str] = Field(default_factory=list, description="Ordered IDs of evidence events touching this issue.")
+
+
+class EvidenceEvent(BaseModel):
+    """Chronologically ordered atomic evidence event extracted from a dialogue clause."""
+    event_id: str = Field(description="Unique event ID (e.g. t0.c0.e0).")
+    turn_index: int = Field(description="Transcript turn index.")
+    clause_index: int = Field(default=0, description="Clause index within turn.")
+    sub_index: int = Field(default=0, description="Order index within clause.")
+    speaker: ActorRole = Field(default=ActorRole.UNKNOWN, description="Speaker role uttering this evidence.")
+    claim_type: ClaimType = Field(default=ClaimType.OTHER_CONTEXT, description="Categorical nature of the claim.")
+    polarity: Polarity = Field(default=Polarity.AFFIRMATIVE, description="Affirmative vs negated predicate.")
+    temporal_scope: TemporalScope = Field(default=TemporalScope.PRESENT_OR_CURRENT, description="Time horizon described.")
+    target_id: Optional[str] = Field(default=None, description="Associated target entity ID.")
+    issue_id: Optional[str] = Field(default=None, description="Associated operational issue ID.")
+    link_confidence: LinkConfidence = Field(default=LinkConfidence.NONE, description="Confidence of issue/target association.")
+    source_quote: str = Field(default="", description="Verbatim clause text supporting this event.")
+    span: Optional[Tuple[int, int]] = Field(default=None, description="Character offsets (start, end) within turn text.")
+    supersedes_event_id: Optional[str] = Field(default=None, description="ID of earlier event explicitly superseded by this one.")
+    review_reasons: List[str] = Field(default_factory=list, description="Reason codes if this event contains ambiguity.")
+
+
+class RemoteIdCandidate(BaseModel):
+    """Evaluated remote connection ID candidate with provenance and safety validation."""
+    candidate_id: str = Field(description="Unique candidate identifier.")
+    value: Optional[str] = Field(default=None, description="Extracted numerical identifier (e.g. 419 883 201).")
+    turn_index: int = Field(description="Turn index where candidate appeared.")
+    clause_index: int = Field(default=0, description="Clause index where candidate appeared.")
+    speaker: ActorRole = Field(default=ActorRole.UNKNOWN, description="Speaker offering the candidate.")
+    anchor: RemoteIdAnchor = Field(default=RemoteIdAnchor.NONE, description="Remote software anchor category.")
+    site_label: Optional[str] = Field(default=None, description="Associated site or location label.")
+    target_id: Optional[str] = Field(default=None, description="Associated equipment target.")
+    status: RemoteIdStatus = Field(default=RemoteIdStatus.ACTIVE, description="Safety lifecycle status.")
+    superseded_by: Optional[str] = Field(default=None, description="ID of superseding candidate if corrected.")
+    consultant_connected: bool = Field(default=False, description="Whether consultant explicitly verified connection to this ID.")
+    rejected_reasons: List[str] = Field(default_factory=list, description="Audit log of reasons if candidate was rejected.")
+
+
+class ReviewReason(BaseModel):
+    """Machine-readable explanation for why human review is required."""
+    code: str = Field(description="Machine-readable error/review code (e.g. AMBIGUOUS_ISSUE_SCOPE).")
+    message: str = Field(description="Human-readable guidance explaining the uncertainty.")
+    event_ids: List[str] = Field(default_factory=list, description="IDs of evidence events triggering this review.")
+    turn_indices: List[int] = Field(default_factory=list, description="Turn indices involved.")
+    field_name: Optional[str] = Field(default=None, description="Specific output field impacted, if applicable.")
 
 
 class NormalizedEntity(BaseModel):
@@ -176,3 +336,53 @@ class ConversationAnalysis(BaseModel):
     sentiment: SentimentAnalysis = Field(description="Customer sentiment (secondary metadata).")
     evidence: List[EvidenceItem] = Field(default_factory=list, description="Master audit trail.")
     confidence: ConfidenceAssessment = Field(description="Confidence metrics and human review notes.")
+
+    # Phase 3 Additive Models & Fields (Fully backward-compatible with defaults)
+    technical_resolution_status: ResolutionStatus = Field(
+        default=ResolutionStatus.UNKNOWN,
+        description="Canonical technical outcome without follow-up commitment conflation."
+    )
+    review_required: bool = Field(
+        default=False,
+        description="Flag indicating human review is required due to ambiguity, conflict, or safety gates."
+    )
+    review_reasons: List[ReviewReason] = Field(
+        default_factory=list,
+        description="Structured machine-readable reasons why human review is required."
+    )
+    outcome_reasons: List[str] = Field(
+        default_factory=list,
+        description="Descriptive reasons for status assignment (e.g. NO_CONFIRMATION_OF_FIX) that do not trigger human review."
+    )
+    closure_blockers: List[str] = Field(
+        default_factory=list,
+        description="Explicit reasons why this case cannot be marked Closed in CRM."
+    )
+    field_flags: Dict[str, str] = Field(
+        default_factory=dict,
+        description="Field-specific warnings (e.g. {'Remote_Connection_ID__c': 'MULTIPLE_ACTIVE_REMOTE_IDS'})."
+    )
+    targets: List[TargetEntity] = Field(
+        default_factory=list,
+        description="Identified physical endpoints, tills, devices, or network nodes."
+    )
+    issues: List[OperationalIssue] = Field(
+        default_factory=list,
+        description="Distinct reported problems tracked across dialogue."
+    )
+    events: List[EvidenceEvent] = Field(
+        default_factory=list,
+        description="Chronological evidence events extracted from transcript."
+    )
+    remote_id_candidates: List[RemoteIdCandidate] = Field(
+        default_factory=list,
+        description="All evaluated remote connection candidates with provenance and safety statuses."
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def sync_technical_resolution(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "technical_resolution_status" not in data and "resolution_status" in data:
+                data["technical_resolution_status"] = data["resolution_status"]
+        return data
