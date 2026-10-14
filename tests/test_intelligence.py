@@ -282,8 +282,8 @@ class TestHardenedIntelligence(unittest.TestCase):
 
     # TEST 19: End-to-End Real Transcript Integration
     def test_19_real_transcript_pipeline(self):
-        sample_path = Path("recordings/demo_sample_transcript.json")
-        real_transcript_path = sample_path if sample_path.exists() else Path("recordings/transcript.json")
+        sample_path = Path("fixtures/demo_sample_transcript.json")
+        real_transcript_path = sample_path if sample_path.exists() else Path("recordings_preserved/demo_sample_transcript.json")
         if not real_transcript_path.exists():
             self.skipTest("Transcript benchmark fixture not present on disk")
 
@@ -351,8 +351,8 @@ class TestHardenedIntelligence(unittest.TestCase):
     # TEST 20: Narrative Case Summary Prose Generation
     def test_20_salesforce_narrative_case_summary_format(self):
         from intelligence.formatter import generate_narrative_case_summary, format_draft_salesforce_payload
-        sample_path = Path("recordings/demo_sample_transcript.json")
-        real_transcript_path = sample_path if sample_path.exists() else Path("recordings/transcript.json")
+        sample_path = Path("fixtures/demo_sample_transcript.json")
+        real_transcript_path = sample_path if sample_path.exists() else Path("recordings_preserved/demo_sample_transcript.json")
         if not real_transcript_path.exists():
             self.skipTest("Transcript benchmark fixture not present on disk")
 

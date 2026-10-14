@@ -26,6 +26,7 @@
   // Local Engine elements
   const engineDot = $('engine-dot');
   const engineText = $('engine-text');
+  const engineStatus = $('engine-status');
   const tabNotes = $('tab-notes');
   const tabTranscript = $('tab-transcript');
   const tabReview = $('tab-review');
@@ -42,7 +43,33 @@
   const reviewConfidence = $('review-confidence');
   const salesforceContainer = $('salesforce-container');
   const copySfBtn = $('copy-sf-btn');
+  const sfEditedBadge = $('sf-edited-badge');
+  const sfRestoreBtn = $('sf-restore-btn');
   const btnLoadSample = $('btn-load-sample');
+
+  // Desktop Split elements (D.1)
+  const mainContent = $('main-content');
+  const btnToggleSplit = $('btn-toggle-split');
+  const splitToggleLabel = $('split-toggle-label');
+
+  // Call History elements (D.3)
+  const btnCallHistory = $('btn-call-history');
+  const historyBadge = $('history-badge');
+  const callHistoryDrawer = $('call-history-drawer');
+  const chClose = $('ch-close');
+  const chList = $('ch-list');
+  const chTotalCount = $('ch-total-count');
+  const chRefreshBtn = $('ch-refresh-btn');
+
+  // Pairing Modal elements (SEC-01 & SEC-04)
+  const enginePairingModal = $('engine-pairing-modal');
+  const epClose = $('ep-close');
+  const epCancelBtn = $('ep-cancel-btn');
+  const epForm = $('ep-form');
+  const epCodeInput = $('ep-code-input');
+  const epError = $('ep-error');
+  const epRemember = $('ep-remember');
+  const epSubmitBtn = $('ep-submit-btn');
 
   // Processing Stepper elements
   const processingCard = $('processing-card');
@@ -68,7 +95,16 @@
   let engineSessionTimer = null;
   let engineElapsedSeconds = 0;
   let currentSalesforcePayload = null;
+  let originalSalesforceValues = null;
   let artifactsLoaded = false;
+  let recordingSessionId = null;
+  let selectedSessionId = null;
+  let selectedSessionType = 'none'; // 'live', 'demo', 'none'
+  let inMemoryEngineToken = null;
+  let isDesktopSplit = false;
+  let activeLeftTab = 'notes';
+  let activeRightTab = 'review';
+  let currentTabId = 'notes';
 
   const DEMO_TRANSCRIPT_DATA = {
     merged_turns: [
@@ -162,15 +198,115 @@
     { key: 'preparing_review', label: 'Salesforce Case Record Draft', desc: 'Formatting reviewable CRM case record' }
   ];
 
+  function getEngineToken() {
+    return inMemoryEngineToken || sessionStorage.getItem('syn.engine_auth_token') || null;
+  }
+
+  function setEngineToken(token, remember = false) {
+    inMemoryEngineToken = token;
+    if (remember) {
+      sessionStorage.setItem('syn.engine_auth_token', token);
+    } else {
+      sessionStorage.removeItem('syn.engine_auth_token');
+    }
+  }
+
+  function clearEngineToken() {
+    inMemoryEngineToken = null;
+    sessionStorage.removeItem('syn.engine_auth_token');
+  }
+
+  function openPairingModal() {
+    if (!enginePairingModal) return;
+    if (epCodeInput) epCodeInput.value = '';
+    if (epError) { epError.hidden = true; epError.textContent = ''; }
+    enginePairingModal.hidden = false;
+    setTimeout(() => { if (epCodeInput) epCodeInput.focus(); }, 60);
+  }
+
+  function closePairingModal() {
+    if (!enginePairingModal) return;
+    enginePairingModal.hidden = true;
+    if (epError) { epError.hidden = true; epError.textContent = ''; }
+  }
+
+  function promptPairingCode() {
+    openPairingModal();
+  }
+
+  async function pairWithEngine(code, remember = false) {
+    if (!code || !code.trim()) {
+      if (epError) { epError.textContent = 'Please enter a 6-digit pairing code.'; epError.hidden = false; }
+      return false;
+    }
+    const cleanCode = code.replace(/\s+/g, '').replace(/-/g, '').trim();
+    try {
+      const res = await fetch(`${LOCAL_ENGINE_URL}/auth/pair`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pairing_code: cleanCode })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setEngineToken(data.auth_token, remember);
+        closePairingModal();
+        showToast('Successfully authenticated with Speak Engine!');
+        pollLocalEngine();
+        updateCallHistoryBadge();
+        return true;
+      } else if (res.status === 429) {
+        const err = await res.json().catch(() => ({}));
+        const msg = err.detail || 'Rate limit cooldown active. Please wait 60 seconds before trying again.';
+        if (epError) { epError.textContent = msg; epError.hidden = false; }
+        showToast(`Pairing cooldown: ${msg}`);
+        return false;
+      } else {
+        const err = await res.json().catch(() => ({}));
+        const msg = err.detail || 'Invalid or expired pairing code.';
+        if (epError) { epError.textContent = msg; epError.hidden = false; }
+        showToast(`Pairing failed: ${msg}`);
+        return false;
+      }
+    } catch (e) {
+      const msg = `Connection error: ${e.message}`;
+      if (epError) { epError.textContent = msg; epError.hidden = false; }
+      showToast(`Pairing connection error: ${e.message}`);
+      return false;
+    }
+  }
+
+  async function engineFetch(path, options = {}) {
+    const url = `${LOCAL_ENGINE_URL}${path.startsWith('/') ? path : '/' + path}`;
+    const token = getEngineToken();
+    const headers = { ...(options.headers || {}) };
+    if (token) {
+      headers['X-Speak-Engine-Auth'] = token;
+    }
+    const merged = { ...options, headers };
+    const res = await fetch(url, merged);
+    if (res.status === 401) {
+      clearEngineToken();
+      if (engineConnected) {
+        setEngineConnectionState(false, null, 'needs_pairing');
+      }
+      showToast('Speak Engine requires authentication.', 'Enter Code', () => openPairingModal());
+    }
+    return res;
+  }
+
   async function pollLocalEngine() {
     if (!window.__enableEngineInTest && (typeof window.__instances === 'function' || typeof window.__emit === 'function' || navigator.webdriver)) {
       return;
     }
     try {
-      const res = await fetch(`${LOCAL_ENGINE_URL}/status`, { signal: AbortSignal.timeout(1500) });
+      const query = selectedSessionId ? `?session_id=${encodeURIComponent(selectedSessionId)}` : '';
+      const res = await engineFetch(`/status${query}`, { signal: AbortSignal.timeout(1500) });
       if (res.ok) {
         const data = await res.json();
         setEngineConnectionState(true, data);
+        updateCallHistoryBadge();
+      } else if (res.status === 401) {
+        setEngineConnectionState(false, null, 'needs_pairing');
       } else {
         setEngineConnectionState(false);
       }
@@ -179,20 +315,34 @@
     }
   }
 
-  function setEngineConnectionState(connected, data = null) {
+  function setEngineConnectionState(connected, data = null, reason = null) {
     engineConnected = connected;
     if (tagsNav) tagsNav.hidden = connected;
     if (connected) {
       engineDot.className = 'h-2 w-2 rounded-full bg-emerald-500 animate-pulse';
       engineText.textContent = 'Engine Connected';
       engineText.className = 'font-semibold text-emerald-600 dark:text-emerald-400';
+      engineText.onclick = null;
       if (data) {
         handleEngineStatusUpdate(data);
       }
     } else {
       engineDot.className = 'h-2 w-2 rounded-full bg-amber-500';
-      engineText.textContent = 'Engine Offline';
-      engineText.className = 'text-slate-500 dark:text-slate-400';
+      if (reason === 'needs_pairing') {
+        engineText.textContent = 'Engine Needs Pairing';
+        engineText.className = 'font-semibold text-amber-600 dark:text-amber-400 cursor-pointer underline decoration-dotted';
+        engineText.onclick = openPairingModal;
+      } else {
+        engineText.textContent = 'Engine Offline';
+        engineText.className = 'text-slate-500 dark:text-slate-400 cursor-pointer';
+        engineText.onclick = () => {
+          if (!getEngineToken()) {
+            openPairingModal();
+          } else {
+            pollLocalEngine();
+          }
+        };
+      }
       if (engineState === 'recording') {
         clearInterval(engineSessionTimer);
         engineState = 'idle';
@@ -317,9 +467,11 @@
       renderProcessingStepper(data);
       setMicButtonState('idle', 'Start Call Capture');
       setStatus('Call processing complete. Review generated.', 'ok');
-      activeSessionId = data.session_id || activeSessionId;
-      activeSessionType = data.session_type || 'live';
-      fetchAndRenderEngineArtifacts(activeSessionId);
+      selectedSessionId = data.session_id || selectedSessionId;
+      selectedSessionType = data.session_type || 'live';
+      if (selectedSessionId) {
+        fetchAndRenderEngineArtifacts(selectedSessionId);
+      }
       showToast('Live call analysis ready! Review before Salesforce update.');
     } else if (data.status === 'ready') {
       setMicButtonState('idle', 'Start Call Capture');
@@ -367,20 +519,18 @@
   }
   const setMicState = setMicButtonState;
 
-  let activeSessionId = null;
-  let activeSessionType = 'none'; // 'live', 'demo', 'none'
-
   async function startEngineCallCapture() {
     try {
       setStatus('Connecting to audio streams…');
-      const res = await fetch(`${LOCAL_ENGINE_URL}/capture/start`, { method: 'POST' });
+      const res = await engineFetch('/capture/start', { method: 'POST' });
       if (!res.ok) {
         const err = await res.json();
         throw new Error(err.detail || 'Could not start capture');
       }
       const resData = await res.json();
-      activeSessionId = resData.session_id || null;
-      activeSessionType = 'live';
+      recordingSessionId = resData.session_id || null;
+      selectedSessionId = recordingSessionId;
+      selectedSessionType = 'live';
       engineState = 'recording';
       engineElapsedSeconds = 0;
       artifactsLoaded = false;
@@ -393,12 +543,12 @@
       setMicButtonState('recording');
 
       // Clear previous call artifacts while new recording is in progress
-      transcriptContainer.innerHTML = `<p class="italic text-slate-400">Recording live call (Session: ${escapeHtml(activeSessionId || '')})… transcript will generate upon stopping capture.</p>`;
+      transcriptContainer.innerHTML = `<p class="italic text-slate-400">Recording live call (Session: ${escapeHtml(recordingSessionId || '')})… transcript will generate upon stopping capture.</p>`;
       transcriptCount.textContent = 'Recording…';
-      reviewContainer.innerHTML = `<p class="italic text-slate-400">Recording live call (Session: ${escapeHtml(activeSessionId || '')})… AI analysis will generate upon stopping capture.</p>`;
+      reviewContainer.innerHTML = `<p class="italic text-slate-400">Recording live call (Session: ${escapeHtml(recordingSessionId || '')})… AI analysis will generate upon stopping capture.</p>`;
       reviewConfidence.textContent = '—';
       reviewConfidence.className = 'rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700';
-      salesforceContainer.innerHTML = `<p class="italic text-slate-400">Recording live call (Session: ${escapeHtml(activeSessionId || '')})… Salesforce draft will generate upon stopping capture.</p>`;
+      salesforceContainer.innerHTML = `<p class="italic text-slate-400">Recording live call (Session: ${escapeHtml(recordingSessionId || '')})… Salesforce draft will generate upon stopping capture.</p>`;
     } catch (e) {
       showToast(`Failed to start capture: ${e.message}`);
       setStatus('Capture failed', 'err');
@@ -406,15 +556,21 @@
   }
 
   async function stopEngineCallCapture() {
+    if (!recordingSessionId) {
+      showToast('No active recording session to stop.');
+      return;
+    }
+    const sessionToStop = recordingSessionId;
     clearInterval(engineSessionTimer);
     setMicButtonState('processing', 'Stopping capture & transcribing…');
     setStatus('Finalizing audio files…', 'info');
     try {
-      const res = await fetch(`${LOCAL_ENGINE_URL}/capture/stop`, { method: 'POST' });
+      const res = await engineFetch(`/capture/stop?session_id=${encodeURIComponent(sessionToStop)}`, { method: 'POST' });
       if (!res.ok) {
         const err = await res.json();
         throw new Error(err.detail || 'Could not stop capture');
       }
+      recordingSessionId = null;
       engineState = 'processing';
       pollLocalEngine();
     } catch (e) {
@@ -423,24 +579,27 @@
     }
   }
 
-  async function fetchAndRenderEngineArtifacts(sessionId = null) {
-    const targetSession = sessionId || activeSessionId;
-    const sessionQuery = targetSession ? `?session_id=${encodeURIComponent(targetSession)}` : '';
+  async function fetchAndRenderEngineArtifacts(sessionId) {
+    if (!sessionId) {
+      console.warn('fetchAndRenderEngineArtifacts called without explicit sessionId');
+      return;
+    }
+    const sessionQuery = `?session_id=${encodeURIComponent(sessionId)}`;
     try {
       // 1. Fetch transcript
-      const resTrans = await fetch(`${LOCAL_ENGINE_URL}/transcript${sessionQuery}`);
+      const resTrans = await engineFetch(`/transcript${sessionQuery}`);
       if (!resTrans.ok) {
         const err = await resTrans.json();
         throw new Error(`Transcript fetch failed: ${err.detail || resTrans.statusText}`);
       }
       const transData = await resTrans.json();
-      if (transData.session_id && targetSession && transData.session_id !== targetSession) {
-        throw new Error(`Session mismatch: received ${transData.session_id}, expected ${targetSession}`);
+      if (transData.session_id && transData.session_id !== sessionId) {
+        throw new Error(`Session mismatch: received ${transData.session_id}, expected ${sessionId}`);
       }
       renderTranscript(transData.data);
 
       // 2. Fetch analysis & review
-      const resReview = await fetch(`${LOCAL_ENGINE_URL}/review${sessionQuery}`);
+      const resReview = await engineFetch(`/review${sessionQuery}`);
       if (!resReview.ok) {
         const err = await resReview.json();
         throw new Error(`Review fetch failed: ${err.detail || resReview.statusText}`);
@@ -449,7 +608,7 @@
       renderReview(reviewData);
 
       // 3. Fetch structured analysis JSON
-      const resAnalysis = await fetch(`${LOCAL_ENGINE_URL}/analysis${sessionQuery}`);
+      const resAnalysis = await engineFetch(`/analysis${sessionQuery}`);
       if (resAnalysis.ok) {
         const analysisData = await resAnalysis.json();
         if (analysisData.data && analysisData.data.confidence) {
@@ -459,9 +618,9 @@
       }
       artifactsLoaded = true;
     } catch (e) {
-      console.error('Error fetching live session artifacts:', e);
+      console.error('Error fetching session artifacts:', e);
       setStatus(`Artifact error: ${e.message}`, 'err');
-      showToast(`Could not load session results: ${e.message}`, 'Retry', () => fetchAndRenderEngineArtifacts(targetSession));
+      showToast(`Could not load session results: ${e.message}`, 'Retry', () => fetchAndRenderEngineArtifacts(sessionId));
     }
   }
 
@@ -472,12 +631,12 @@
     transcriptCount.textContent = `${turns.length} turns`;
 
     let html = '';
-    turns.forEach((t) => {
+    turns.forEach((t, idx) => {
       const isConsultant = t.speaker === 'CONSULTANT';
       const bg = isConsultant ? 'bg-teal-50 dark:bg-teal-950/40 border-teal-200 dark:border-teal-800' : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700';
       const badge = isConsultant ? 'bg-teal-600 text-white' : 'bg-indigo-600 text-white';
       html += `
-        <div class="rounded-xl border p-2.5 ${bg}">
+        <div class="transcript-turn rounded-xl border p-2.5 transition ${bg}" data-turn-idx="${idx}" data-turn-text="${escapeHtml(t.text)}">
           <div class="flex items-center justify-between gap-2 mb-1">
             <span class="rounded px-1.5 py-0.5 text-[10px] font-bold ${badge}">${t.speaker}</span>
             <span class="text-[10px] text-slate-400 font-mono">${t.timestamp_str || ''}</span>
@@ -497,48 +656,138 @@
     if (!reviewData) return;
     artifactsLoaded = true;
     
-    // Render Markdown summary nicely
+    // Render Markdown summary nicely with evidence links
     const md = reviewData.markdown || '';
     reviewContainer.innerHTML = formatSimpleMarkdown(md);
 
     // Trigger Procedure Hub evaluation on review summary
     triggerProcedureContext(md);
 
-    // Render Salesforce Draft
+    // Render Salesforce Draft with editable inputs and dirty tracking
+    renderSalesforceDraft(reviewData);
+  }
+
+  function renderSalesforceDraft(reviewData) {
     currentSalesforcePayload = reviewData.salesforce_draft;
-    if (currentSalesforcePayload) {
-      const f = currentSalesforcePayload.fields || currentSalesforcePayload;
-      const subject = f.Subject || f.subject || '';
-      const description = f.Description || f.description || '';
-      const status = f.Status || f.status || 'Pending';
-      const remoteId = f.Remote_Connection_ID__c || f.remote_connection_id || 'N/A';
-      salesforceContainer.innerHTML = `
-        <div class="space-y-3">
-          <div class="rounded-xl border border-amber-300 bg-amber-50 p-3 dark:border-amber-700/60 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200">
-            <p class="font-bold text-xs">Human Review Boundary</p>
-            <p class="text-[11px]">This case update was automatically generated. Review and click "Copy Case Record" to paste into Salesforce.</p>
-          </div>
-          <div class="grid grid-cols-2 gap-2 text-xs">
-            <div class="p-2 rounded-lg bg-slate-100 dark:bg-slate-800">
-              <span class="text-slate-400 font-semibold block text-[10px]">CASE STATUS</span>
-              <span class="font-bold text-slate-800 dark:text-slate-200">${escapeHtml(status)}</span>
+    if (!currentSalesforcePayload) return;
+
+    const f = currentSalesforcePayload.fields || currentSalesforcePayload;
+    const subject = f.Subject || f.subject || '';
+    const description = f.Description || f.description || '';
+    const status = f.Status || f.status || 'Pending Follow-up';
+    const remoteId = f.Remote_Connection_ID__c || f.remote_connection_id || 'N/A';
+    const category = f.Resolution_Category__c || f.resolution_category || 'Technical Support';
+
+    originalSalesforceValues = {
+      subject: subject,
+      remoteId: remoteId,
+      category: category,
+      status: status,
+      description: description
+    };
+
+    if (sfEditedBadge) sfEditedBadge.hidden = true;
+    if (sfRestoreBtn) sfRestoreBtn.hidden = true;
+
+    salesforceContainer.innerHTML = `
+      <div class="space-y-3">
+        <div class="rounded-xl border border-amber-300 bg-amber-50 p-3 dark:border-amber-700/60 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200">
+          <p class="font-bold text-xs">Human Review & CRM Sync</p>
+          <p class="text-[11px]">Review or modify fields below. Changes are tracked. Use the copy buttons to transfer individual fields or the full record into Salesforce.</p>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+          <div class="p-2.5 rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-800/60">
+            <div class="flex items-center justify-between mb-1">
+              <label for="sf-status" class="text-slate-500 dark:text-slate-400 font-semibold text-[10px] uppercase">CASE STATUS</label>
+              <button type="button" class="sf-copy-field-btn text-[10px] text-teal-600 dark:text-teal-400 font-bold hover:underline" data-target="sf-status" data-label="Status">Copy</button>
             </div>
-            <div class="p-2 rounded-lg bg-slate-100 dark:bg-slate-800">
-              <span class="text-slate-400 font-semibold block text-[10px]">REMOTE CONNECTION ID</span>
-              <span class="font-bold text-slate-800 dark:text-slate-200">${escapeHtml(remoteId)}</span>
+            <input id="sf-status" type="text" value="${escapeHtml(status)}" class="w-full rounded-lg border border-slate-300 bg-white p-1.5 text-xs font-bold text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-teal-500" />
+          </div>
+          <div class="p-2.5 rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-800/60">
+            <div class="flex items-center justify-between mb-1">
+              <label for="sf-remote-id" class="text-slate-500 dark:text-slate-400 font-semibold text-[10px] uppercase">REMOTE CONNECTION ID</label>
+              <button type="button" class="sf-copy-field-btn text-[10px] text-teal-600 dark:text-teal-400 font-bold hover:underline" data-target="sf-remote-id" data-label="Remote ID">Copy</button>
             </div>
-          </div>
-          <div>
-            <label class="font-bold text-xs block mb-1">Subject</label>
-            <input type="text" readonly value="${escapeHtml(subject)}" class="w-full rounded-lg border border-slate-300 bg-slate-50 p-2 text-xs font-semibold dark:border-slate-700 dark:bg-slate-800" />
-          </div>
-          <div>
-            <label class="font-bold text-xs block mb-1">Case Description (CRM Update)</label>
-            <textarea readonly rows="8" class="w-full rounded-lg border border-slate-300 bg-slate-50 p-2 text-xs font-mono leading-relaxed dark:border-slate-700 dark:bg-slate-800">${escapeHtml(description)}</textarea>
+            <input id="sf-remote-id" type="text" value="${escapeHtml(remoteId)}" class="w-full rounded-lg border border-slate-300 bg-white p-1.5 text-xs font-mono font-bold text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-teal-500" />
           </div>
         </div>
-      `;
-    }
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+          <div class="p-2.5 rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-800/60">
+            <div class="flex items-center justify-between mb-1">
+              <label for="sf-category" class="text-slate-500 dark:text-slate-400 font-semibold text-[10px] uppercase">RESOLUTION CATEGORY</label>
+              <button type="button" class="sf-copy-field-btn text-[10px] text-teal-600 dark:text-teal-400 font-bold hover:underline" data-target="sf-category" data-label="Category">Copy</button>
+            </div>
+            <input id="sf-category" type="text" value="${escapeHtml(category)}" class="w-full rounded-lg border border-slate-300 bg-white p-1.5 text-xs font-semibold text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-teal-500" />
+          </div>
+          <div class="p-2.5 rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-800/60">
+            <div class="flex items-center justify-between mb-1">
+              <label for="sf-subject" class="text-slate-500 dark:text-slate-400 font-semibold text-[10px] uppercase">CASE SUBJECT</label>
+              <button type="button" class="sf-copy-field-btn text-[10px] text-teal-600 dark:text-teal-400 font-bold hover:underline" data-target="sf-subject" data-label="Subject">Copy</button>
+            </div>
+            <input id="sf-subject" type="text" value="${escapeHtml(subject)}" class="w-full rounded-lg border border-slate-300 bg-white p-1.5 text-xs font-semibold text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-teal-500" />
+          </div>
+        </div>
+        <div class="p-2.5 rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-800/60">
+          <div class="flex items-center justify-between mb-1">
+            <label for="sf-description" class="text-slate-500 dark:text-slate-400 font-semibold text-[10px] uppercase">CASE DESCRIPTION (FIRST-PERSON CRM NARRATIVE)</label>
+            <button type="button" class="sf-copy-field-btn text-[10px] text-teal-600 dark:text-teal-400 font-bold hover:underline" data-target="sf-description" data-label="Description">Copy</button>
+          </div>
+          <textarea id="sf-description" rows="7" class="w-full rounded-lg border border-slate-300 bg-white p-2 text-xs font-mono leading-relaxed text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-teal-500">${escapeHtml(description)}</textarea>
+        </div>
+      </div>
+    `;
+
+    ['sf-subject', 'sf-remote-id', 'sf-category', 'sf-status', 'sf-description'].forEach((id) => {
+      const el = $(id);
+      if (el) {
+        el.addEventListener('input', checkSalesforceDirty);
+        el.addEventListener('change', checkSalesforceDirty);
+      }
+    });
+  }
+
+  function checkSalesforceDirty() {
+    if (!originalSalesforceValues) return;
+    const currentSubject = $('sf-subject')?.value ?? '';
+    const currentRemoteId = $('sf-remote-id')?.value ?? '';
+    const currentCategory = $('sf-category')?.value ?? '';
+    const currentStatus = $('sf-status')?.value ?? '';
+    const currentDescription = $('sf-description')?.value ?? '';
+
+    const isDirty = (
+      currentSubject !== originalSalesforceValues.subject ||
+      currentRemoteId !== originalSalesforceValues.remoteId ||
+      currentCategory !== originalSalesforceValues.category ||
+      currentStatus !== originalSalesforceValues.status ||
+      currentDescription !== originalSalesforceValues.description
+    );
+
+    if (sfEditedBadge) sfEditedBadge.hidden = !isDirty;
+    if (sfRestoreBtn) sfRestoreBtn.hidden = !isDirty;
+  }
+
+  function restoreOriginalSalesforceDraft() {
+    if (!originalSalesforceValues) return;
+    const sub = $('sf-subject'); if (sub) sub.value = originalSalesforceValues.subject;
+    const rem = $('sf-remote-id'); if (rem) rem.value = originalSalesforceValues.remoteId;
+    const cat = $('sf-category'); if (cat) cat.value = originalSalesforceValues.category;
+    const stat = $('sf-status'); if (stat) stat.value = originalSalesforceValues.status;
+    const desc = $('sf-description'); if (desc) desc.value = originalSalesforceValues.description;
+
+    if (sfEditedBadge) sfEditedBadge.hidden = true;
+    if (sfRestoreBtn) sfRestoreBtn.hidden = true;
+    showToast('Restored original Salesforce draft fields.');
+  }
+
+  function copyFieldToClipboard(targetId, fieldName) {
+    const el = $(targetId);
+    if (!el) return;
+    const val = el.value || '';
+    navigator.clipboard.writeText(val).then(() => {
+      showToast(`${fieldName} copied to clipboard!`);
+    }).catch(() => {
+      showToast('Copy failed.');
+    });
   }
 
   function escapeHtml(str) {
@@ -559,6 +808,11 @@
     // Bullet items
     out = out.replace(/^\- (.*?)$/gm, '<li class="ml-4 list-disc">$1</li>');
     out = out.replace(/^\* (.*?)$/gm, '<li class="ml-4 list-disc">$1</li>');
+    // Evidence quotes in tables or text (D.4)
+    out = out.replace(/\*(?:&quot;|"|“)(.*?)(?:&quot;|"|”)\*/g, (match, quoteText) => {
+      const cleanQuote = quoteText.replace(/&quot;/g, '"');
+      return `<span class="evidence-quote-link" title="Click to view quote in transcript" data-quote="${escapeHtml(cleanQuote)}">"${cleanQuote}"</span>`;
+    });
     // Tables
     out = out.replace(/\|(.+)\|/g, (match) => {
       const cells = match.split('|').filter((c) => c.trim() !== '');
@@ -568,24 +822,107 @@
     return out.replace(/\n\n/g, '<br/>');
   }
 
-  // ---------------------------------------------------------------- Tab Navigation
+  // Evidence Quote Click Handler on reviewContainer (D.4)
+  reviewContainer.addEventListener('click', (e) => {
+    const quoteEl = e.target.closest('.evidence-quote-link');
+    if (!quoteEl) return;
+
+    const rawQuote = quoteEl.getAttribute('data-quote') || quoteEl.textContent || '';
+    const cleanQuote = rawQuote.replace(/^["'“\s]+|["'”\s\.]+/g, '').trim().toLowerCase();
+    if (!cleanQuote) return;
+
+    // Switch or ensure dialogue is visible
+    if (!isDesktopSplit) {
+      switchTab('transcript');
+    }
+
+    // Search turns in transcriptContainer
+    const turns = transcriptContainer.querySelectorAll('.transcript-turn');
+    let matchedTurn = null;
+
+    // Search by full string or prominent tokens
+    const tokens = cleanQuote.split(/\s+/).filter((w) => w.length > 3);
+    const searchToken = tokens.slice(0, 3).join(' ');
+
+    for (const turn of turns) {
+      const turnText = (turn.getAttribute('data-turn-text') || turn.textContent || '').toLowerCase();
+      if (turnText.includes(cleanQuote) || (searchToken && turnText.includes(searchToken))) {
+        matchedTurn = turn;
+        break;
+      }
+    }
+
+    if (matchedTurn) {
+      matchedTurn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      matchedTurn.classList.add('turn-highlight-pulse');
+      setTimeout(() => matchedTurn.classList.remove('turn-highlight-pulse'), 2500);
+      showToast('Jumped to dialogue evidence turn!');
+    } else {
+      showToast('Evidence quote located in audio source.');
+    }
+  });
+
+  // ---------------------------------------------------------------- Desktop Split & Tab Navigation (D.1)
+  function toggleDesktopSplit(forceState) {
+    if (!mainContent) return;
+    isDesktopSplit = typeof forceState === 'boolean' ? forceState : !isDesktopSplit;
+    mainContent.classList.toggle('desktop-split-active', isDesktopSplit);
+    if (splitToggleLabel) {
+      splitToggleLabel.textContent = isDesktopSplit ? 'Split View: On' : 'Split View: Off';
+    }
+    if (btnToggleSplit) {
+      if (isDesktopSplit) {
+        btnToggleSplit.classList.add('border-teal-500', 'bg-teal-50', 'dark:bg-teal-950/40', 'text-teal-700', 'dark:text-teal-300');
+      } else {
+        btnToggleSplit.classList.remove('border-teal-500', 'bg-teal-50', 'dark:bg-teal-950/40', 'text-teal-700', 'dark:text-teal-300');
+      }
+    }
+    updatePanelsForCurrentMode();
+  }
+
+  function updatePanelsForCurrentMode() {
+    if (processingCard && !processingCard.hidden) return;
+
+    if (!isDesktopSplit) {
+      const tabs = [
+        { id: 'notes', btn: tabNotes, panel: panelNotes },
+        { id: 'transcript', btn: tabTranscript, panel: panelTranscript },
+        { id: 'review', btn: tabReview, panel: panelReview },
+        { id: 'salesforce', btn: tabSalesforce, panel: panelSalesforce },
+      ];
+      tabs.forEach((t) => {
+        const active = (t.id === currentTabId);
+        t.panel.hidden = !active;
+        t.btn.className = active ? 'tab-item-active' : 'tab-item';
+      });
+      if (tagsNav) tagsNav.hidden = currentTabId !== 'notes' || engineConnected;
+    } else {
+      // Dual-pane layout on desktop: Left pane (Notes or Transcript), Right pane (Review or Salesforce)
+      panelNotes.hidden = (activeLeftTab !== 'notes');
+      panelTranscript.hidden = (activeLeftTab !== 'transcript');
+      panelReview.hidden = (activeRightTab !== 'review');
+      panelSalesforce.hidden = (activeRightTab !== 'salesforce');
+
+      tabNotes.className = (activeLeftTab === 'notes') ? 'tab-item-active' : 'tab-item';
+      tabTranscript.className = (activeLeftTab === 'transcript') ? 'tab-item-active' : 'tab-item';
+      tabReview.className = (activeRightTab === 'review') ? 'tab-item-active' : 'tab-item';
+      tabSalesforce.className = (activeRightTab === 'salesforce') ? 'tab-item-active' : 'tab-item';
+
+      if (tagsNav) tagsNav.hidden = activeLeftTab !== 'notes' || engineConnected;
+    }
+  }
+
   function switchTab(tabId) {
     if (processingCard) processingCard.hidden = true;
+    currentTabId = tabId;
 
-    const tabs = [
-      { id: 'notes', btn: tabNotes, panel: panelNotes },
-      { id: 'transcript', btn: tabTranscript, panel: panelTranscript },
-      { id: 'review', btn: tabReview, panel: panelReview },
-      { id: 'salesforce', btn: tabSalesforce, panel: panelSalesforce },
-    ];
+    if (tabId === 'notes' || tabId === 'transcript') {
+      activeLeftTab = tabId;
+    } else if (tabId === 'review' || tabId === 'salesforce') {
+      activeRightTab = tabId;
+    }
 
-    tabs.forEach((t) => {
-      const active = t.id === tabId;
-      t.panel.hidden = !active;
-      t.btn.className = active ? 'tab-item-active' : 'tab-item';
-    });
-
-    if (tagsNav) tagsNav.hidden = tabId !== 'notes' || engineConnected;
+    updatePanelsForCurrentMode();
   }
 
   tabNotes.addEventListener('click', () => switchTab('notes'));
@@ -603,17 +940,256 @@
     btnViewSf.addEventListener('click', () => switchTab('salesforce'));
   }
 
-  // ---------------------------------------------------------------- Demo & Copy Actions
+  if (btnToggleSplit) {
+    btnToggleSplit.addEventListener('click', () => toggleDesktopSplit());
+  }
+
+  // ---------------------------------------------------------------- Call History Drawer (D.3)
+  async function updateCallHistoryBadge() {
+    if (!getEngineToken()) return;
+    try {
+      const res = await engineFetch('/sessions');
+      if (res.ok) {
+        const list = await res.json();
+        if (historyBadge) historyBadge.textContent = String(list.length || 0);
+        if (chTotalCount) chTotalCount.textContent = `${list.length || 0} sessions found`;
+      }
+    } catch {
+      // background update
+    }
+  }
+
+  async function loadCallHistory() {
+    if (!chList) return;
+    if (!engineConnected && !getEngineToken()) {
+      chList.innerHTML = `
+        <div class="p-4 text-center text-slate-500 dark:text-slate-400">
+          <p class="font-semibold text-xs">Local Engine Not Connected</p>
+          <p class="text-[11px] mt-1">Authenticate with the Speak Engine to access persistent call session history.</p>
+          <button id="ch-pair-btn" type="button" class="btn btn-sm bg-teal-600 text-white mt-2 text-xs">Pair Engine</button>
+        </div>
+      `;
+      const pBtn = $('ch-pair-btn');
+      if (pBtn) pBtn.onclick = () => { closeCallHistoryDrawer(); openPairingModal(); };
+      return;
+    }
+
+    chList.innerHTML = '<p class="italic text-slate-400 p-2">Loading session history from engine…</p>';
+    try {
+      const res = await engineFetch('/sessions');
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || 'Failed to retrieve session list');
+      }
+      const sessions = await res.json();
+      if (historyBadge) historyBadge.textContent = String(sessions.length);
+      if (chTotalCount) chTotalCount.textContent = `${sessions.length} sessions found`;
+
+      if (sessions.length === 0) {
+        chList.innerHTML = '<p class="italic text-slate-400 p-3 text-center">No recorded sessions found yet.</p>';
+        return;
+      }
+
+      sessions.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+
+      let html = '';
+      sessions.forEach((s) => {
+        const isReady = s.status === 'ready';
+        const isError = s.status === 'error' || s.status === 'interrupted';
+        const isQueued = s.status === 'queued' || s.status === 'queued_backpressure';
+        const isRec = s.status === 'recording' || s.status === 'processing';
+
+        let badgeBg = 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300';
+        if (isReady) badgeBg = 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300';
+        else if (isError) badgeBg = 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300';
+        else if (isQueued) badgeBg = 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300';
+        else if (isRec) badgeBg = 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300';
+
+        const dateStr = s.created_at ? new Date(s.created_at).toLocaleString() : 'Recent';
+        const shortId = s.session_id.replace(/^session_/, '').slice(0, 16);
+
+        let retryButtonHtml = '';
+        if (isError || s.status === 'queued_backpressure') {
+          retryButtonHtml = `
+            <button type="button" class="ch-retry-btn btn btn-sm bg-amber-600 text-white hover:bg-amber-500 px-2 py-0.5 text-[10px]" data-session-id="${escapeHtml(s.session_id)}">Retry</button>
+          `;
+        }
+
+        html += `
+          <div class="rounded-xl border border-slate-200 dark:border-slate-800 p-2.5 bg-slate-50 dark:bg-slate-800/40 space-y-1.5">
+            <div class="flex items-center justify-between gap-1">
+              <span class="font-mono font-bold text-[11px] truncate text-slate-800 dark:text-slate-200" title="${escapeHtml(s.session_id)}">${escapeHtml(shortId)}</span>
+              <span class="rounded px-1.5 py-0.5 text-[9px] font-bold ${badgeBg} uppercase">${escapeHtml(s.status)}</span>
+            </div>
+            <div class="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400">
+              <span>${escapeHtml(dateStr)}</span>
+              <span class="capitalize">${escapeHtml(s.session_type || 'live')}</span>
+            </div>
+            ${s.error_message ? `<p class="text-[10px] text-red-600 dark:text-red-400 truncate" title="${escapeHtml(s.error_message)}">${escapeHtml(s.error_message)}</p>` : ''}
+            <div class="flex items-center justify-between pt-1 border-t dark:border-slate-800">
+              <div class="flex gap-1 text-[9px] text-slate-400">
+                ${s.audio_available ? '<span title="Audio WAVs available">🎙️ Audio</span>' : ''}
+                ${s.has_transcript ? '<span title="Transcript available">📝 Transcript</span>' : ''}
+                ${s.has_review ? '<span title="CRM analysis available">⚡ CRM</span>' : ''}
+              </div>
+              <div class="flex items-center gap-1">
+                ${retryButtonHtml}
+                <button type="button" class="ch-load-btn btn btn-sm bg-teal-600 text-white hover:bg-teal-500 px-2 py-0.5 text-[10px]" data-session-id="${escapeHtml(s.session_id)}" data-session-type="${escapeHtml(s.session_type || 'live')}">Load</button>
+              </div>
+            </div>
+          </div>
+        `;
+      });
+      chList.innerHTML = html;
+    } catch (e) {
+      chList.innerHTML = `<p class="text-red-500 text-xs p-2">Failed to load history: ${escapeHtml(e.message)}</p>`;
+    }
+  }
+
+  function openCallHistoryDrawer() {
+    if (!callHistoryDrawer) return;
+    callHistoryDrawer.hidden = false;
+    loadCallHistory();
+  }
+
+  function closeCallHistoryDrawer() {
+    if (!callHistoryDrawer) return;
+    callHistoryDrawer.hidden = true;
+  }
+
+  async function retrySessionFromHistory(sessionId) {
+    showToast(`Re-enqueuing session ${sessionId}…`);
+    try {
+      const res = await engineFetch(`/sessions/${encodeURIComponent(sessionId)}/retry`, { method: 'POST' });
+      if (res.ok) {
+        showToast(`Session ${sessionId} re-enqueued!`);
+        loadCallHistory();
+        pollLocalEngine();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        showToast(`Retry rejected: ${err.detail || 'Could not retry session'}`);
+      }
+    } catch (e) {
+      showToast(`Retry error: ${e.message}`);
+    }
+  }
+
+  if (btnCallHistory) {
+    btnCallHistory.addEventListener('click', openCallHistoryDrawer);
+  }
+  if (chClose) {
+    chClose.addEventListener('click', closeCallHistoryDrawer);
+  }
+  if (chRefreshBtn) {
+    chRefreshBtn.addEventListener('click', loadCallHistory);
+  }
+  if (callHistoryDrawer) {
+    callHistoryDrawer.addEventListener('click', (e) => {
+      if (e.target === callHistoryDrawer) closeCallHistoryDrawer();
+    });
+  }
+  if (chList) {
+    chList.addEventListener('click', (e) => {
+      const loadBtn = e.target.closest('.ch-load-btn');
+      if (loadBtn) {
+        const sId = loadBtn.getAttribute('data-session-id');
+        const sType = loadBtn.getAttribute('data-session-type') || 'live';
+        selectedSessionId = sId;
+        selectedSessionType = sType;
+        fetchAndRenderEngineArtifacts(sId);
+        closeCallHistoryDrawer();
+        switchTab('review');
+        showToast(`Loaded session ${sId}`);
+        return;
+      }
+      const retryBtn = e.target.closest('.ch-retry-btn');
+      if (retryBtn) {
+        const sId = retryBtn.getAttribute('data-session-id');
+        retrySessionFromHistory(sId);
+      }
+    });
+  }
+
+  // ---------------------------------------------------------------- Pairing Modal Listeners (SEC-01 & SEC-04)
+  if (epClose) epClose.addEventListener('click', closePairingModal);
+  if (epCancelBtn) epCancelBtn.addEventListener('click', closePairingModal);
+  if (enginePairingModal) {
+    enginePairingModal.addEventListener('click', (e) => {
+      if (e.target === enginePairingModal) closePairingModal();
+    });
+  }
+  if (epForm) {
+    epForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const code = epCodeInput?.value || '';
+      const remember = epRemember?.checked || false;
+      pairWithEngine(code, remember);
+    });
+  }
+
+  // ---------------------------------------------------------------- Salesforce Draft Event Listeners (D.2)
+  if (sfRestoreBtn) {
+    sfRestoreBtn.addEventListener('click', restoreOriginalSalesforceDraft);
+  }
+
+  salesforceContainer.addEventListener('click', (e) => {
+    const btn = e.target.closest('.sf-copy-field-btn');
+    if (btn) {
+      const targetId = btn.getAttribute('data-target');
+      const label = btn.getAttribute('data-label') || 'Field';
+      copyFieldToClipboard(targetId, label);
+    }
+  });
+
+  copySfBtn.addEventListener('click', () => {
+    const sub = $('sf-subject')?.value || '';
+    const rem = $('sf-remote-id')?.value || '';
+    const cat = $('sf-category')?.value || '';
+    const stat = $('sf-status')?.value || '';
+    const desc = $('sf-description')?.value || '';
+
+    if (!sub && !desc) {
+      if (currentSalesforcePayload && currentSalesforcePayload.fields) {
+        const fallbackTxt = currentSalesforcePayload.fields.Description || JSON.stringify(currentSalesforcePayload, null, 2);
+        navigator.clipboard.writeText(fallbackTxt).then(() => showToast('Salesforce case record copied!'));
+      } else {
+        showToast('No Salesforce payload to copy.');
+      }
+      return;
+    }
+
+    const fullRecord = [
+      `Case Subject: ${sub}`,
+      `Case Status: ${stat}`,
+      `Remote Connection ID: ${rem}`,
+      `Resolution Category: ${cat}`,
+      '',
+      'Case Description:',
+      desc
+    ].join('\n');
+
+    navigator.clipboard.writeText(fullRecord).then(() => {
+      showToast('Full Salesforce case record copied to clipboard!');
+    }).catch(() => {
+      showToast('Copy failed.');
+    });
+  });
+
+  // ---------------------------------------------------------------- Demo Actions
   async function loadDemoCall() {
+    if (recordingSessionId) {
+      showToast('Cannot load a demo while recording a live call. Please stop or finish your recording first.');
+      return;
+    }
     showToast('Loading demo call sample…');
     if (engineConnected) {
       try {
-        const res = await fetch(`${LOCAL_ENGINE_URL}/demo/load-sample`, { method: 'POST' });
+        const res = await engineFetch('/demo/load-sample', { method: 'POST' });
         if (res.ok) {
           const resData = await res.json();
-          activeSessionId = resData.session_id || 'sample_real_call_demo';
-          activeSessionType = 'demo';
-          await fetchAndRenderEngineArtifacts(activeSessionId);
+          selectedSessionId = resData.session_id;
+          selectedSessionType = 'demo';
+          await fetchAndRenderEngineArtifacts(selectedSessionId);
           switchTab('review');
           showToast('Real 9-minute demo call loaded!');
           return;
@@ -625,8 +1201,8 @@
 
     // Client-side demo fallback ONLY when engine is offline and user explicitly clicked Demo Call
     try {
-      activeSessionId = 'demo_client_offline';
-      activeSessionType = 'demo';
+      selectedSessionId = 'demo_client_offline';
+      selectedSessionType = 'demo';
       renderTranscript(DEMO_TRANSCRIPT_DATA);
       renderReview({
         markdown: DEMO_REVIEW_MARKDOWN,
@@ -642,22 +1218,11 @@
     }
   }
 
-  btnLoadSample.addEventListener('click', () => {
-    loadDemoCall();
-  });
-
-  copySfBtn.addEventListener('click', () => {
-    if (!currentSalesforcePayload || !currentSalesforcePayload.fields) {
-      showToast('No Salesforce payload to copy.');
-      return;
-    }
-    const txt = currentSalesforcePayload.fields.Description || JSON.stringify(currentSalesforcePayload, null, 2);
-    navigator.clipboard.writeText(txt).then(() => {
-      showToast('Salesforce case record copied to clipboard!');
-    }).catch(() => {
-      showToast('Copy failed.');
+  if (btnLoadSample) {
+    btnLoadSample.addEventListener('click', () => {
+      loadDemoCall();
     });
-  });
+  }
 
   // ---------------------------------------------------------------- quick-insert shortcuts
   const fieldsTemplate = (title, firstField) =>
@@ -1065,6 +1630,7 @@
 
   // Start polling Local Engine on loopback
   pollLocalEngine();
+  updateCallHistoryBadge();
   setInterval(pollLocalEngine, 2000);
 
   // Procedure Hub awareness layer

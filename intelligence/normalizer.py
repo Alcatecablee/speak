@@ -26,7 +26,20 @@ DOMAIN_CATALOG: Dict[str, Dict[str, str]] = {
     "variance": {"normalized": "Stock Variance / Recipe Balancing", "category": "SYSTEM_FUNCTION"},
     "anyshop": {"normalized": "AnyShop POS", "category": "SYSTEM_MODULE"},
     "microsip": {"normalized": "MicroSIP Softphone", "category": "TELEPHONY"},
-    "salesforce": {"normalized": "Salesforce CRM", "category": "CRM_SYSTEM"}
+    "salesforce": {"normalized": "Salesforce CRM", "category": "CRM_SYSTEM"},
+    "license": {"normalized": "Software License Certificate", "category": "SYSTEM_MODULE"},
+    "grv": {"normalized": "Goods Received Voucher / GRV", "category": "INVENTORY"},
+    "cashup": {"normalized": "Cashup Balancing", "category": "SYSTEM_FUNCTION"},
+    "adumo": {"normalized": "Adumo Payment Driver", "category": "PAYMENT_INTEGRATION"},
+    "sql": {"normalized": "SQL Database Engine", "category": "DATABASE"},
+    "backup": {"normalized": "Database Backup", "category": "SYSTEM_FUNCTION"},
+
+    # Hardware & Peripherals
+    "printer": {"normalized": "Network / Receipt Printer", "category": "HARDWARE"},
+    "epson": {"normalized": "Epson Printer", "category": "HARDWARE"},
+    "scanner": {"normalized": "Barcode Scanner", "category": "HARDWARE"},
+    "terminal": {"normalized": "POS Terminal", "category": "HARDWARE"},
+    "till": {"normalized": "POS Till / Cash Drawer", "category": "HARDWARE"}
 }
 
 

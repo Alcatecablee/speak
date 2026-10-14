@@ -105,12 +105,22 @@ class TranscriptionPipeline:
             txt_path = os.path.join(output_dir, "transcript.txt")
             json_path = os.path.join(output_dir, "transcript.json")
             
-            with open(txt_path, "w", encoding="utf-8") as f:
+            # Atomic write for text transcript
+            tmp_txt = os.path.join(output_dir, f"transcript_{os.getpid()}_{int(session_start_time.timestamp())}.tmp")
+            with open(tmp_txt, "w", encoding="utf-8") as f:
                 f.write(transcript_text)
-                
-            with open(json_path, "w", encoding="utf-8") as f:
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_txt, txt_path)
+
+            # Atomic write for JSON transcript
+            tmp_json = os.path.join(output_dir, f"transcript_json_{os.getpid()}_{int(session_start_time.timestamp())}.tmp")
+            with open(tmp_json, "w", encoding="utf-8") as f:
                 json.dump(result, f, indent=2)
-                
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_json, json_path)
+
             logger.info(f"[OUTPUT] Saved text transcript to: {txt_path}")
             logger.info(f"[OUTPUT] Saved JSON metadata to:  {json_path}")
             

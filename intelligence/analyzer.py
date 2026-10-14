@@ -8,6 +8,7 @@ import logging
 import os
 from pathlib import Path
 from typing import Any, Dict, Optional, Type
+import uuid
 
 from intelligence.formatter import format_draft_salesforce_payload, format_markdown_review
 from intelligence.models import ConversationAnalysis
@@ -52,24 +53,36 @@ class ConversationAnalyzer:
             out_path = Path(output_dir)
             out_path.mkdir(parents=True, exist_ok=True)
 
-            # 1. Save validated JSON
+            # 1. Save validated JSON atomically
             json_file = out_path / "analysis.json"
-            with open(json_file, "w", encoding="utf-8") as f:
+            tmp_json = out_path / f"analysis_{os.getpid()}_{uuid.uuid4().hex[:8]}.tmp"
+            with open(tmp_json, "w", encoding="utf-8") as f:
                 f.write(analysis.model_dump_json(indent=2))
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_json, json_file)
             logger.info(f"Saved analysis JSON to {json_file}")
 
-            # 2. Save Markdown review document
+            # 2. Save Markdown review document atomically
             md_file = out_path / "analysis_review.md"
             md_content = format_markdown_review(analysis)
-            with open(md_file, "w", encoding="utf-8") as f:
+            tmp_md = out_path / f"review_{os.getpid()}_{uuid.uuid4().hex[:8]}.tmp"
+            with open(tmp_md, "w", encoding="utf-8") as f:
                 f.write(md_content)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_md, md_file)
             logger.info(f"Saved Markdown review to {md_file}")
 
-            # 3. Save draft Salesforce payload (without transmitting)
+            # 3. Save draft Salesforce payload atomically
             sf_file = out_path / "salesforce_draft_payload.json"
             sf_payload = format_draft_salesforce_payload(analysis)
-            with open(sf_file, "w", encoding="utf-8") as f:
+            tmp_sf = out_path / f"sf_{os.getpid()}_{uuid.uuid4().hex[:8]}.tmp"
+            with open(tmp_sf, "w", encoding="utf-8") as f:
                 json.dump(sf_payload, f, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_sf, sf_file)
             logger.info(f"Saved draft Salesforce payload to {sf_file}")
 
         return analysis

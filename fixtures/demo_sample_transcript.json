@@ -1,0 +1,642 @@
+{
+  "status": "success",
+  "call_start_time": "2026-10-06T22:37:39.804890",
+  "consultant_segments_count": 83,
+  "client_segments_count": 59,
+  "total_dialogue_turns": 90,
+  "merged_turns": [
+    {
+      "speaker": "CONSULTANT",
+      "start_seconds": 0.0,
+      "end_seconds": 6.0,
+      "timestamp_str": "22:37:39",
+      "text": "Okay, what's your address or ID?"
+    },
+    {
+      "speaker": "CLIENT",
+      "start_seconds": 0.0,
+      "end_seconds": 1.0,
+      "timestamp_str": "22:37:39",
+      "text": "Twenty-two eighty-eight twenty-six twenty-six twenty-six twenty-six twenty-six twenty-two twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six"
+    },
+    {
+      "speaker": "CONSULTANT",
+      "start_seconds": 6.0,
+      "end_seconds": 38.0,
+      "timestamp_str": "22:37:45",
+      "text": "20288 2622 2622 Zero double six Oh nine or mine. Okay, I'm connected now."
+    },
+    {
+      "speaker": "CLIENT",
+      "start_seconds": 30.0,
+      "end_seconds": 40.0,
+      "timestamp_str": "22:38:09",
+      "text": "Okay, all right, let me show you."
+    },
+    {
+      "speaker": "CONSULTANT",
+      "start_seconds": 38.0,
+      "end_seconds": 48.0,
+      "timestamp_str": "22:38:17",
+      "text": "Okay, all right, let me show you."
+    },
+    {
+      "speaker": "CLIENT",
+      "start_seconds": 40.0,
+      "end_seconds": 54.0,
+      "timestamp_str": "22:38:19",
+      "text": "Okay, so the first one is this one, the cheesecake, right?"
+    },
+    {
+      "speaker": "CONSULTANT",
+      "start_seconds": 48.0,
+      "end_seconds": 60.0,
+      "timestamp_str": "22:38:27",
+      "text": "Okay, so the first one is the one that you speak, right? So we, to the touch that's here, all we get there."
+    },
+    {
+      "speaker": "CLIENT",
+      "start_seconds": 54.0,
+      "end_seconds": 60.0,
+      "timestamp_str": "22:38:33",
+      "text": "So, we saw the badge that he obviously gets that equation."
+    },
+    {
+      "speaker": "CONSULTANT",
+      "start_seconds": 60.0,
+      "end_seconds": 69.0,
+      "timestamp_str": "22:38:39",
+      "text": "It's a question from one day, so if they need one batch, I mean, they need one batch."
+    },
+    {
+      "speaker": "CLIENT",
+      "start_seconds": 60.0,
+      "end_seconds": 74.24,
+      "timestamp_str": "22:38:39",
+      "text": "from one make. So last week they made one batch. I mean they made yeah they made one batch for the devices. But on the variant here it's supposed to show me minus 13 and then I'm supposed"
+    },
+    {
+      "speaker": "CONSULTANT",
+      "start_seconds": 69.0,
+      "end_seconds": 75.0,
+      "timestamp_str": "22:38:48",
+      "text": "But on the very end, yeah, it's a whole to show me minus 13."
+    },
+    {
+      "speaker": "CLIENT",
+      "start_seconds": 74.24,
+      "end_seconds": 79.52,
+      "timestamp_str": "22:38:54",
+      "text": "to insert that here so that it can balance but it's showing me this so this is what I want"
+    },
+    {
+      "speaker": "CONSULTANT",
+      "start_seconds": 75.0,
+      "end_seconds": 81.0,
+      "timestamp_str": "22:38:54",
+      "text": "And I'm going to answer that again. But it's showing you what I want to do."
+    },
+    {
+      "speaker": "CLIENT",
+      "start_seconds": 79.52,
+      "end_seconds": 81.52,
+      "timestamp_str": "22:38:59",
+      "text": "Good to see you."
+    },
+    {
+      "speaker": "CONSULTANT",
+      "start_seconds": 84.0,
+      "end_seconds": 91.0,
+      "timestamp_str": "22:39:03",
+      "text": "Okay, I'm trying to understand on the variants, it's supposed to say minus. may or may or may or may or may or may or may or may, may or may, may or may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, Yes, yes, yes, yes, yes, when I enter, when I say, when I come to come to the side, when I give me a very little zero, but it's not a point to be wide, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be"
+    },
+    {
+      "speaker": "CLIENT",
+      "start_seconds": 90.0,
+      "end_seconds": 118.0,
+      "timestamp_str": "22:39:09",
+      "text": "So when I enter one, it's going to come, it's going to come to the side and then it's going to give me a variance of zero. But it's not supposed to be one, it's supposed to be tasty, it's in one. But this is a basic portion."
+    },
+    {
+      "speaker": "CONSULTANT",
+      "start_seconds": 120.0,
+      "end_seconds": 129.0,
+      "timestamp_str": "22:39:39",
+      "text": "which needs to be changed because the quantity, it means it's one, that's the unit of measure for this page."
+    },
+    {
+      "speaker": "CLIENT",
+      "start_seconds": 120.0,
+      "end_seconds": 140.0,
+      "timestamp_str": "22:39:39",
+      "text": "Sorry."
+    },
+    {
+      "speaker": "CONSULTANT",
+      "start_seconds": 131.0,
+      "end_seconds": 142.0,
+      "timestamp_str": "22:39:50",
+      "text": "So, I'm saying the unit of measure is one, in this case, for the cheesecake."
+    },
+    {
+      "speaker": "CLIENT",
+      "start_seconds": 140.0,
+      "end_seconds": 150.0,
+      "timestamp_str": "22:39:59",
+      "text": "No, no, no, no. So there is no way we do this such that because we get that the cheese slices from the cheese cake."
+    },
+    {
+      "speaker": "CONSULTANT",
+      "start_seconds": 150.0,
+      "end_seconds": 157.0,
+      "timestamp_str": "22:40:09",
+      "text": "I don't know, so there isn't why we couldn't judge that because we get 13 slices from each. Okay, so when when let's say, because I'm doing things from last week, well let's say"
+    },
+    {
+      "speaker": "CLIENT",
+      "start_seconds": 150.0,
+      "end_seconds": 158.0,
+      "timestamp_str": "22:40:09",
+      "text": "So when let's say, because I'm doing things from last week, so let's say, last week they did it."
+    },
+    {
+      "speaker": "CONSULTANT",
+      "start_seconds": 157.0,
+      "end_seconds": 162.0,
+      "timestamp_str": "22:40:16",
+      "text": "let's say that they made the truth take three times."
+    },
+    {
+      "speaker": "CLIENT",
+      "start_seconds": 158.0,
+      "end_seconds": 164.0,
+      "timestamp_str": "22:40:17",
+      "text": "They made the cheesecake three times, then I was right at three here."
+    },
+    {
+      "speaker": "CONSULTANT",
+      "start_seconds": 162.0,
+      "end_seconds": 168.0,
+      "timestamp_str": "22:40:21",
+      "text": "Then I was right at three here. And then here, it's going to show me a variant of my opinion."
+    },
+    {
+      "speaker": "CLIENT",
+      "start_seconds": 164.0,
+      "end_seconds": 168.0,
+      "timestamp_str": "22:40:23",
+      "text": "And then here it's going to show me a variance of 19."
+    },
+    {
+      "speaker": "CONSULTANT",
+      "start_seconds": 168.0,
+      "end_seconds": 169.0,
+      "timestamp_str": "22:40:27",
+      "text": "Okay."
+    },
+    {
+      "speaker": "CLIENT",
+      "start_seconds": 168.0,
+      "end_seconds": 172.0,
+      "timestamp_str": "22:40:27",
+      "text": "Then I have to edit here on quantity, then it's going to be fine."
+    },
+    {
+      "speaker": "CONSULTANT",
+      "start_seconds": 169.0,
+      "end_seconds": 177.0,
+      "timestamp_str": "22:40:28",
+      "text": "I didn't count to see them as going to try it. But now, even me, why don't you just encourage me to do that?"
+    },
+    {
+      "speaker": "CLIENT",
+      "start_seconds": 172.0,
+      "end_seconds": 179.0,
+      "timestamp_str": "22:40:31",
+      "text": "But now it's giving me one, which is incorrect. So that's why I'm calling to help."
+    },
+    {
+      "speaker": "CONSULTANT",
+      "start_seconds": 177.0,
+      "end_seconds": 180.0,
+      "timestamp_str": "22:40:36",
+      "text": "Why I'm calling? So, help."
+    },
+    {
+      "speaker": "CLIENT",
+      "start_seconds": 179.0,
+      "end_seconds": 180.0,
+      "timestamp_str": "22:40:38",
+      "text": "So, I'm going to show you a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of"
+    },
+    {
+      "speaker": "CONSULTANT",
+      "start_seconds": 180.0,
+      "end_seconds": 184.0,
+      "timestamp_str": "22:40:39",
+      "text": "I'm unable to clear what the problem is."
+    },
+    {
+      "speaker": "CLIENT",
+      "start_seconds": 180.0,
+      "end_seconds": 183.0,
+      "timestamp_str": "22:40:39",
+      "text": "and able to figure what the problem is."
+    },
+    {
+      "speaker": "CONSULTANT",
+      "start_seconds": 184.0,
+      "end_seconds": 216.72,
+      "timestamp_str": "22:40:43",
+      "text": "Yeah, because also me, first, I need to understand where you're coming from. Because I don't normally do, we don't normally deal with the big. So I'm just trying to understand if I can help you. I have to escalate this to our software support department. Because production is not really, some decorsion that we don't normally deal with production. cases. So what I'm trying to understand when you say it's putting one instead of, I'm"
+    },
+    {
+      "speaker": "CLIENT",
+      "start_seconds": 210.0,
+      "end_seconds": 231.28,
+      "timestamp_str": "22:41:09",
+      "text": "Yes, I can't say that, okay, let me explain it to you again. So, the reason why there's"
+    },
+    {
+      "speaker": "CONSULTANT",
+      "start_seconds": 216.72,
+      "end_seconds": 236.0,
+      "timestamp_str": "22:41:16",
+      "text": "you not the one who's putting the quantity or of, because you are putting one, not that Oh, not what you are, you know, there is a widen and says he's edge is because you know what that you take is."
+    },
+    {
+      "speaker": "CLIENT",
+      "start_seconds": 231.28,
+      "end_seconds": 240.08,
+      "timestamp_str": "22:41:31",
+      "text": "assess his edge is because do not achieve take is so we take it in the case"
+    },
+    {
+      "speaker": "CONSULTANT",
+      "start_seconds": 236.0,
+      "end_seconds": 237.0,
+      "timestamp_str": "22:41:35",
+      "text": "Yes."
+    },
+    {
+      "speaker": "CONSULTANT",
+      "start_seconds": 240.0,
+      "end_seconds": 252.0,
+      "timestamp_str": "22:41:39",
+      "text": "in the case, so in that case, we suppose to take out 30 slices out of one, she's kicked."
+    },
+    {
+      "speaker": "CLIENT",
+      "start_seconds": 240.0,
+      "end_seconds": 255.0,
+      "timestamp_str": "22:41:39",
+      "text": "So in that cheesecake, we suppose to take out the cheesecake slices when the stem is out of 1 cheesecake, which is this one."
+    },
+    {
+      "speaker": "CONSULTANT",
+      "start_seconds": 252.0,
+      "end_seconds": 259.0,
+      "timestamp_str": "22:41:51",
+      "text": "I don't know why she's kicked, we should just want to see big two, then I'm going to write two."
+    },
+    {
+      "speaker": "CLIENT",
+      "start_seconds": 255.0,
+      "end_seconds": 259.0,
+      "timestamp_str": "22:41:54",
+      "text": "So if they take two, then I'm going to write two."
+    },
+    {
+      "speaker": "CONSULTANT",
+      "start_seconds": 259.0,
+      "end_seconds": 264.0,
+      "timestamp_str": "22:41:58",
+      "text": "And then here, I'm going to show you 60, and then I'm going to add 60 here, so I'm going to say,"
+    },
+    {
+      "speaker": "CLIENT",
+      "start_seconds": 259.0,
+      "end_seconds": 268.0,
+      "timestamp_str": "22:41:58",
+      "text": "And then here it's going to show me 60 and then I'm going to add 60. I'm going to say minus 60 and then I'm going to write 60 and then it's going to be zero."
+    },
+    {
+      "speaker": "CONSULTANT",
+      "start_seconds": 264.0,
+      "end_seconds": 269.52,
+      "timestamp_str": "22:42:03",
+      "text": "I'm going to write these things in a video, you know what I'm saying now."
+    },
+    {
+      "speaker": "CLIENT",
+      "start_seconds": 268.0,
+      "end_seconds": 269.0,
+      "timestamp_str": "22:42:07",
+      "text": "and now."
+    },
+    {
+      "speaker": "CONSULTANT",
+      "start_seconds": 269.52,
+      "end_seconds": 280.0,
+      "timestamp_str": "22:42:09",
+      "text": "Oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, Okay, so in this case, because you are saying if they use two, so in this case, what are you trying to do?"
+    },
+    {
+      "speaker": "CLIENT",
+      "start_seconds": 270.0,
+      "end_seconds": 293.6,
+      "timestamp_str": "22:42:09",
+      "text": "Okay, and this case, I'm getting, so, for the, when I enter one here, and it immediately"
+    },
+    {
+      "speaker": "CONSULTANT",
+      "start_seconds": 280.0,
+      "end_seconds": 300.0,
+      "timestamp_str": "22:42:19",
+      "text": "Because you were giving me an example, but now what are you trying to do? Okay, so, when I enter one here, I mean, immediately the variance must only minus the S and E, so if I enter this one, then E."
+    },
+    {
+      "speaker": "CLIENT",
+      "start_seconds": 293.6,
+      "end_seconds": 299.6,
+      "timestamp_str": "22:42:33",
+      "text": "He's a very smart show-me-minus that he as you saw before is that this one. You need..."
+    },
+    {
+      "speaker": "CONSULTANT",
+      "start_seconds": 300.0,
+      "end_seconds": 304.0,
+      "timestamp_str": "22:42:39",
+      "text": "You just start again."
+    },
+    {
+      "speaker": "CLIENT",
+      "start_seconds": 300.0,
+      "end_seconds": 304.14,
+      "timestamp_str": "22:42:39",
+      "text": "You know, at the far end of the one, it says minus one."
+    },
+    {
+      "speaker": "CONSULTANT",
+      "start_seconds": 304.0,
+      "end_seconds": 310.0,
+      "timestamp_str": "22:42:43",
+      "text": "It should say minus theta."
+    },
+    {
+      "speaker": "CLIENT",
+      "start_seconds": 304.14,
+      "end_seconds": 310.88,
+      "timestamp_str": "22:42:43",
+      "text": "I'm not used to seeing this, and then I add here,"
+    },
+    {
+      "speaker": "CONSULTANT",
+      "start_seconds": 310.0,
+      "end_seconds": 314.0,
+      "timestamp_str": "22:42:49",
+      "text": "And then I add here a theta."
+    },
+    {
+      "speaker": "CLIENT",
+      "start_seconds": 310.88,
+      "end_seconds": 316.82,
+      "timestamp_str": "22:42:50",
+      "text": "they see in minutes, I'm going to define. Because if I write one here, when I pull out the report"
+    },
+    {
+      "speaker": "CONSULTANT",
+      "start_seconds": 314.0,
+      "end_seconds": 324.0,
+      "timestamp_str": "22:42:53",
+      "text": "Because if I write to 1, when I pull out the report for the week, I'm going to have a variable."
+    },
+    {
+      "speaker": "CLIENT",
+      "start_seconds": 316.82,
+      "end_seconds": 326.4,
+      "timestamp_str": "22:42:56",
+      "text": "for the week, I'm going to have a variance on the report. Because then here it's going to mean I only have one slice,"
+    },
+    {
+      "speaker": "CONSULTANT",
+      "start_seconds": 324.0,
+      "end_seconds": 328.0,
+      "timestamp_str": "22:43:03",
+      "text": "Okay."
+    },
+    {
+      "speaker": "CLIENT",
+      "start_seconds": 326.4,
+      "end_seconds": 328.6,
+      "timestamp_str": "22:43:06",
+      "text": "and it's not one slice."
+    },
+    {
+      "speaker": "CONSULTANT",
+      "start_seconds": 328.0,
+      "end_seconds": 329.0,
+      "timestamp_str": "22:43:07",
+      "text": "It's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's..."
+    },
+    {
+      "speaker": "CLIENT",
+      "start_seconds": 328.6,
+      "end_seconds": 329.6,
+      "timestamp_str": "22:43:08",
+      "text": "But it does lead."
+    },
+    {
+      "speaker": "CONSULTANT",
+      "start_seconds": 330.0,
+      "end_seconds": 334.8,
+      "timestamp_str": "22:43:09",
+      "text": "It's just one cheesecake, yeah, no, I understand."
+    },
+    {
+      "speaker": "CLIENT",
+      "start_seconds": 330.0,
+      "end_seconds": 331.0,
+      "timestamp_str": "22:43:09",
+      "text": "Yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay,"
+    },
+    {
+      "speaker": "CONSULTANT",
+      "start_seconds": 334.8,
+      "end_seconds": 353.0,
+      "timestamp_str": "22:43:14",
+      "text": "So now what I need to find out from my side is how, because it looks like there is something wrong with the unit of measure. It's taking, for example, I used to see this quantity, when you say one, it's just taking one as 30."
+    },
+    {
+      "speaker": "CONSULTANT",
+      "start_seconds": 360.0,
+      "end_seconds": 364.8,
+      "timestamp_str": "22:43:39",
+      "text": "Not as in slices, but as in one chip. cake. That's why you are having variants because it's counting the whole cheesecake,"
+    },
+    {
+      "speaker": "CLIENT",
+      "start_seconds": 360.0,
+      "end_seconds": 386.0,
+      "timestamp_str": "22:43:39",
+      "text": "Yeah, yeah, I must put in the slices, not the one fancy thing, basically, because whenever I enter, yeah."
+    },
+    {
+      "speaker": "CONSULTANT",
+      "start_seconds": 364.8,
+      "end_seconds": 381.44,
+      "timestamp_str": "22:43:44",
+      "text": "not counting the slices which you are putting in here. Here you are putting the slices right, not the cheesecake quantity. Yeah, here I'm putting the slices, yes, yes, yes. Okay, all right, so."
+    },
+    {
+      "speaker": "CLIENT",
+      "start_seconds": 386.0,
+      "end_seconds": 387.0,
+      "timestamp_str": "22:44:05",
+      "text": "I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know"
+    },
+    {
+      "speaker": "CONSULTANT",
+      "start_seconds": 390.0,
+      "end_seconds": 397.36,
+      "timestamp_str": "22:44:09",
+      "text": "they are how these cheesecake production was created. So I will have to check on my"
+    },
+    {
+      "speaker": "CLIENT",
+      "start_seconds": 390.0,
+      "end_seconds": 412.0,
+      "timestamp_str": "22:44:09",
+      "text": "Okay. 15 minutes. Okay. All right. All right. That's fine. All right. That's fine."
+    },
+    {
+      "speaker": "CONSULTANT",
+      "start_seconds": 390.44,
+      "end_seconds": 391.44,
+      "timestamp_str": "22:44:10",
+      "text": "So I was just saying that's what now I need to say."
+    },
+    {
+      "speaker": "CONSULTANT",
+      "start_seconds": 397.36,
+      "end_seconds": 403.12,
+      "timestamp_str": "22:44:17",
+      "text": "side. I'll give maximum 15 minutes. I'll call you back. I'll wake up on my side."
+    },
+    {
+      "speaker": "CONSULTANT",
+      "start_seconds": 405.12,
+      "end_seconds": 411.92,
+      "timestamp_str": "22:44:24",
+      "text": "Okay. Yeah, maximum 15 minutes. Okay. All right. Thank you."
+    },
+    {
+      "speaker": "CLIENT",
+      "start_seconds": 412.0,
+      "end_seconds": 420.0,
+      "timestamp_str": "22:44:31",
+      "text": "And please note that in the name, let me just say it then, let's say, I mean, I'm not going to be here."
+    },
+    {
+      "speaker": "CONSULTANT",
+      "start_seconds": 420.0,
+      "end_seconds": 431.0,
+      "timestamp_str": "22:44:39",
+      "text": "I mean for now I just want to do the basic and then I will call you like within 50"
+    },
+    {
+      "speaker": "CLIENT",
+      "start_seconds": 420.0,
+      "end_seconds": 443.0,
+      "timestamp_str": "22:44:39",
+      "text": "available, and in case it's a bad law, okay, okay, okay, all right, okay, and then because I had two problems."
+    },
+    {
+      "speaker": "CONSULTANT",
+      "start_seconds": 431.0,
+      "end_seconds": 445.0,
+      "timestamp_str": "22:44:50",
+      "text": "Just whether I find out the issue or not, but I still going to give an update in the next 15 minutes. Okay. All right. And then because I had two problems. Okay."
+    },
+    {
+      "speaker": "CLIENT",
+      "start_seconds": 443.0,
+      "end_seconds": 449.0,
+      "timestamp_str": "22:45:02",
+      "text": "So the other one was the button at the pur\u00e9e."
+    },
+    {
+      "speaker": "CONSULTANT",
+      "start_seconds": 445.0,
+      "end_seconds": 476.0,
+      "timestamp_str": "22:45:04",
+      "text": "Now, the other one was the biochemistry. But this one, the person I can call me is yeah, I can actually, I just want one page, I know you can do it, and then manage for that, like I need to show me how to do it, but if I can call you up to the question, it's just those two things."
+    },
+    {
+      "speaker": "CLIENT",
+      "start_seconds": 450.0,
+      "end_seconds": 476.0,
+      "timestamp_str": "22:45:09",
+      "text": "Let me just put a zero here, so that's yeah. But this one, the pattern that's probably easier. That's not theory. I just want one KG. I know you can do it on that managed pattern. But I just need to show me how to do it. But it's fine. You can call me after 15 minutes, so it's just those two things."
+    },
+    {
+      "speaker": "CONSULTANT",
+      "start_seconds": 476.0,
+      "end_seconds": 485.0,
+      "timestamp_str": "22:45:35",
+      "text": "Sorry, we can do that one now, so that it... At least when I drop, I'm just focusing on the other if this one is a quick one."
+    },
+    {
+      "speaker": "CLIENT",
+      "start_seconds": 480.0,
+      "end_seconds": 498.0,
+      "timestamp_str": "22:45:39",
+      "text": "Okay, do you think you'll be able to do it on your side or it's not going to be possible?"
+    },
+    {
+      "speaker": "CONSULTANT",
+      "start_seconds": 493.0,
+      "end_seconds": 496.0,
+      "timestamp_str": "22:45:52",
+      "text": "Okay, so what do you need me to do on the Bata Nadpuray?"
+    },
+    {
+      "speaker": "CLIENT",
+      "start_seconds": 498.0,
+      "end_seconds": 510.0,
+      "timestamp_str": "22:45:57",
+      "text": "I want one, I just wanted to put, to be put in one KG or basically KG, because that's, that, yeah, not fetched, I see."
+    },
+    {
+      "speaker": "CONSULTANT",
+      "start_seconds": 505.0,
+      "end_seconds": 507.0,
+      "timestamp_str": "22:46:04",
+      "text": "Or in cages."
+    },
+    {
+      "speaker": "CONSULTANT",
+      "start_seconds": 510.0,
+      "end_seconds": 515.68,
+      "timestamp_str": "22:46:09",
+      "text": "Okay, okay, no, I can do that is all for you and then I'll call you once after 15 minutes, okay?"
+    },
+    {
+      "speaker": "CLIENT",
+      "start_seconds": 510.0,
+      "end_seconds": 511.0,
+      "timestamp_str": "22:46:09",
+      "text": "All right, all right, thank you, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right,"
+    },
+    {
+      "speaker": "CONSULTANT",
+      "start_seconds": 516.96,
+      "end_seconds": 519.96,
+      "timestamp_str": "22:46:16",
+      "text": "All right, you welcome. Bye bye"
+    }
+  ],
+  "transcript_text": "[22:37:39] CONSULTANT: Okay, what's your address or ID?\n[22:37:39] CLIENT: Twenty-two eighty-eight twenty-six twenty-six twenty-six twenty-six twenty-six twenty-two twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six twenty-six\n[22:37:45] CONSULTANT: 20288 2622 2622 Zero double six Oh nine or mine. Okay, I'm connected now.\n[22:38:09] CLIENT: Okay, all right, let me show you.\n[22:38:17] CONSULTANT: Okay, all right, let me show you.\n[22:38:19] CLIENT: Okay, so the first one is this one, the cheesecake, right?\n[22:38:27] CONSULTANT: Okay, so the first one is the one that you speak, right? So we, to the touch that's here, all we get there.\n[22:38:33] CLIENT: So, we saw the badge that he obviously gets that equation.\n[22:38:39] CONSULTANT: It's a question from one day, so if they need one batch, I mean, they need one batch.\n[22:38:39] CLIENT: from one make. So last week they made one batch. I mean they made yeah they made one batch for the devices. But on the variant here it's supposed to show me minus 13 and then I'm supposed\n[22:38:48] CONSULTANT: But on the very end, yeah, it's a whole to show me minus 13.\n[22:38:54] CLIENT: to insert that here so that it can balance but it's showing me this so this is what I want\n[22:38:54] CONSULTANT: And I'm going to answer that again. But it's showing you what I want to do.\n[22:38:59] CLIENT: Good to see you.\n[22:39:03] CONSULTANT: Okay, I'm trying to understand on the variants, it's supposed to say minus. may or may or may or may or may or may or may or may, may or may, may or may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, may, Yes, yes, yes, yes, yes, when I enter, when I say, when I come to come to the side, when I give me a very little zero, but it's not a point to be wide, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be fair, it's a point to be\n[22:39:09] CLIENT: So when I enter one, it's going to come, it's going to come to the side and then it's going to give me a variance of zero. But it's not supposed to be one, it's supposed to be tasty, it's in one. But this is a basic portion.\n[22:39:39] CONSULTANT: which needs to be changed because the quantity, it means it's one, that's the unit of measure for this page.\n[22:39:39] CLIENT: Sorry.\n[22:39:50] CONSULTANT: So, I'm saying the unit of measure is one, in this case, for the cheesecake.\n[22:39:59] CLIENT: No, no, no, no. So there is no way we do this such that because we get that the cheese slices from the cheese cake.\n[22:40:09] CONSULTANT: I don't know, so there isn't why we couldn't judge that because we get 13 slices from each. Okay, so when when let's say, because I'm doing things from last week, well let's say\n[22:40:09] CLIENT: So when let's say, because I'm doing things from last week, so let's say, last week they did it.\n[22:40:16] CONSULTANT: let's say that they made the truth take three times.\n[22:40:17] CLIENT: They made the cheesecake three times, then I was right at three here.\n[22:40:21] CONSULTANT: Then I was right at three here. And then here, it's going to show me a variant of my opinion.\n[22:40:23] CLIENT: And then here it's going to show me a variance of 19.\n[22:40:27] CONSULTANT: Okay.\n[22:40:27] CLIENT: Then I have to edit here on quantity, then it's going to be fine.\n[22:40:28] CONSULTANT: I didn't count to see them as going to try it. But now, even me, why don't you just encourage me to do that?\n[22:40:31] CLIENT: But now it's giving me one, which is incorrect. So that's why I'm calling to help.\n[22:40:36] CONSULTANT: Why I'm calling? So, help.\n[22:40:38] CLIENT: So, I'm going to show you a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of a little bit of\n[22:40:39] CONSULTANT: I'm unable to clear what the problem is.\n[22:40:39] CLIENT: and able to figure what the problem is.\n[22:40:43] CONSULTANT: Yeah, because also me, first, I need to understand where you're coming from. Because I don't normally do, we don't normally deal with the big. So I'm just trying to understand if I can help you. I have to escalate this to our software support department. Because production is not really, some decorsion that we don't normally deal with production. cases. So what I'm trying to understand when you say it's putting one instead of, I'm\n[22:41:09] CLIENT: Yes, I can't say that, okay, let me explain it to you again. So, the reason why there's\n[22:41:16] CONSULTANT: you not the one who's putting the quantity or of, because you are putting one, not that Oh, not what you are, you know, there is a widen and says he's edge is because you know what that you take is.\n[22:41:31] CLIENT: assess his edge is because do not achieve take is so we take it in the case\n[22:41:35] CONSULTANT: Yes.\n[22:41:39] CONSULTANT: in the case, so in that case, we suppose to take out 30 slices out of one, she's kicked.\n[22:41:39] CLIENT: So in that cheesecake, we suppose to take out the cheesecake slices when the stem is out of 1 cheesecake, which is this one.\n[22:41:51] CONSULTANT: I don't know why she's kicked, we should just want to see big two, then I'm going to write two.\n[22:41:54] CLIENT: So if they take two, then I'm going to write two.\n[22:41:58] CONSULTANT: And then here, I'm going to show you 60, and then I'm going to add 60 here, so I'm going to say,\n[22:41:58] CLIENT: And then here it's going to show me 60 and then I'm going to add 60. I'm going to say minus 60 and then I'm going to write 60 and then it's going to be zero.\n[22:42:03] CONSULTANT: I'm going to write these things in a video, you know what I'm saying now.\n[22:42:07] CLIENT: and now.\n[22:42:09] CONSULTANT: Oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, oh, Okay, so in this case, because you are saying if they use two, so in this case, what are you trying to do?\n[22:42:09] CLIENT: Okay, and this case, I'm getting, so, for the, when I enter one here, and it immediately\n[22:42:19] CONSULTANT: Because you were giving me an example, but now what are you trying to do? Okay, so, when I enter one here, I mean, immediately the variance must only minus the S and E, so if I enter this one, then E.\n[22:42:33] CLIENT: He's a very smart show-me-minus that he as you saw before is that this one. You need...\n[22:42:39] CONSULTANT: You just start again.\n[22:42:39] CLIENT: You know, at the far end of the one, it says minus one.\n[22:42:43] CONSULTANT: It should say minus theta.\n[22:42:43] CLIENT: I'm not used to seeing this, and then I add here,\n[22:42:49] CONSULTANT: And then I add here a theta.\n[22:42:50] CLIENT: they see in minutes, I'm going to define. Because if I write one here, when I pull out the report\n[22:42:53] CONSULTANT: Because if I write to 1, when I pull out the report for the week, I'm going to have a variable.\n[22:42:56] CLIENT: for the week, I'm going to have a variance on the report. Because then here it's going to mean I only have one slice,\n[22:43:03] CONSULTANT: Okay.\n[22:43:06] CLIENT: and it's not one slice.\n[22:43:07] CONSULTANT: It's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's... it's...\n[22:43:08] CLIENT: But it does lead.\n[22:43:09] CONSULTANT: It's just one cheesecake, yeah, no, I understand.\n[22:43:09] CLIENT: Yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay, yay,\n[22:43:14] CONSULTANT: So now what I need to find out from my side is how, because it looks like there is something wrong with the unit of measure. It's taking, for example, I used to see this quantity, when you say one, it's just taking one as 30.\n[22:43:39] CONSULTANT: Not as in slices, but as in one chip. cake. That's why you are having variants because it's counting the whole cheesecake,\n[22:43:39] CLIENT: Yeah, yeah, I must put in the slices, not the one fancy thing, basically, because whenever I enter, yeah.\n[22:43:44] CONSULTANT: not counting the slices which you are putting in here. Here you are putting the slices right, not the cheesecake quantity. Yeah, here I'm putting the slices, yes, yes, yes. Okay, all right, so.\n[22:44:05] CLIENT: I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know what you're doing, but I don't know\n[22:44:09] CONSULTANT: they are how these cheesecake production was created. So I will have to check on my\n[22:44:09] CLIENT: Okay. 15 minutes. Okay. All right. All right. That's fine. All right. That's fine.\n[22:44:10] CONSULTANT: So I was just saying that's what now I need to say.\n[22:44:17] CONSULTANT: side. I'll give maximum 15 minutes. I'll call you back. I'll wake up on my side.\n[22:44:24] CONSULTANT: Okay. Yeah, maximum 15 minutes. Okay. All right. Thank you.\n[22:44:31] CLIENT: And please note that in the name, let me just say it then, let's say, I mean, I'm not going to be here.\n[22:44:39] CONSULTANT: I mean for now I just want to do the basic and then I will call you like within 50\n[22:44:39] CLIENT: available, and in case it's a bad law, okay, okay, okay, all right, okay, and then because I had two problems.\n[22:44:50] CONSULTANT: Just whether I find out the issue or not, but I still going to give an update in the next 15 minutes. Okay. All right. And then because I had two problems. Okay.\n[22:45:02] CLIENT: So the other one was the button at the pur\u00e9e.\n[22:45:04] CONSULTANT: Now, the other one was the biochemistry. But this one, the person I can call me is yeah, I can actually, I just want one page, I know you can do it, and then manage for that, like I need to show me how to do it, but if I can call you up to the question, it's just those two things.\n[22:45:09] CLIENT: Let me just put a zero here, so that's yeah. But this one, the pattern that's probably easier. That's not theory. I just want one KG. I know you can do it on that managed pattern. But I just need to show me how to do it. But it's fine. You can call me after 15 minutes, so it's just those two things.\n[22:45:35] CONSULTANT: Sorry, we can do that one now, so that it... At least when I drop, I'm just focusing on the other if this one is a quick one.\n[22:45:39] CLIENT: Okay, do you think you'll be able to do it on your side or it's not going to be possible?\n[22:45:52] CONSULTANT: Okay, so what do you need me to do on the Bata Nadpuray?\n[22:45:57] CLIENT: I want one, I just wanted to put, to be put in one KG or basically KG, because that's, that, yeah, not fetched, I see.\n[22:46:04] CONSULTANT: Or in cages.\n[22:46:09] CONSULTANT: Okay, okay, no, I can do that is all for you and then I'll call you once after 15 minutes, okay?\n[22:46:09] CLIENT: All right, all right, thank you, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right, all right,\n[22:46:16] CONSULTANT: All right, you welcome. Bye bye",
+  "errors": {},
+  "duration_seconds": 1168.304022
+}

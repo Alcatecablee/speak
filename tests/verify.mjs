@@ -591,6 +591,87 @@ try {
     check('no uncaught JS errors in session provenance test', errors.length === 0, errors.join('; '));
     await ctx.close();
   }
+
+  // ------------------------------------------------------------------ UI Sprint: Desktop Split, Salesforce Draft, History, Evidence
+  console.log('\nUI Sprint Features (Desktop Split, Editable Draft, Call History Drawer, Evidence Links)');
+  {
+    const { ctx, page, errors } = await newPage({ viewport: { width: 1280, height: 800 } });
+
+    // 1. Desktop Split Toggle (D.1)
+    const splitBtn = page.locator('#btn-toggle-split');
+    const mainContent = page.locator('#main-content');
+    check('split toggle button visible on desktop', await splitBtn.isVisible());
+    await splitBtn.click();
+    check('desktop split active class added', await mainContent.evaluate((el) => el.classList.contains('desktop-split-active')));
+    check('split toggle label updated', (await page.locator('#split-toggle-label').innerText()).includes('On'));
+    
+    // In split mode, verify two panels are visible simultaneously
+    check('dual pane active: notes visible', await page.locator('#panel-notes').isVisible());
+    check('dual pane active: review visible', await page.locator('#panel-review').isVisible());
+
+    await splitBtn.click();
+    check('desktop split toggled off', !(await mainContent.evaluate((el) => el.classList.contains('desktop-split-active'))));
+    check('split toggle label reverted', (await page.locator('#split-toggle-label').innerText()).includes('Off'));
+
+    // 2. Call History Drawer (D.3)
+    const historyBtn = page.locator('#btn-call-history');
+    const historyDrawer = page.locator('#call-history-drawer');
+    const historyClose = page.locator('#ch-close');
+    check('call history button exists in header', await historyBtn.isVisible());
+    await historyBtn.click();
+    check('call history drawer opens on click', await historyDrawer.isVisible());
+    await historyClose.click();
+    check('call history drawer closes on close button click', await historyDrawer.isHidden());
+
+    // 3. Editable Salesforce Draft & Dirty Tracking (D.2)
+    await page.click('#btn-load-sample');
+    await page.waitForTimeout(400);
+    await page.click('#tab-salesforce');
+
+    const sfSubject = page.locator('#sf-subject');
+    const sfEditedBadge = page.locator('#sf-edited-badge');
+    const sfRestoreBtn = page.locator('#sf-restore-btn');
+    const origSubject = await sfSubject.inputValue();
+
+    check('salesforce subject input exists and is editable', await sfSubject.isEditable());
+    check('salesforce edited badge initially hidden', await sfEditedBadge.isHidden());
+    check('salesforce restore button initially hidden', await sfRestoreBtn.isHidden());
+
+    // Edit subject field
+    await sfSubject.fill('Edited Recipe Subject');
+    await sfSubject.dispatchEvent('input');
+    check('salesforce edited badge appears on change', await sfEditedBadge.isVisible());
+    check('salesforce restore button appears on change', await sfRestoreBtn.isVisible());
+
+    // Test field-level copy copies the live modified value
+    await page.click('.sf-copy-field-btn[data-target="sf-subject"]');
+    const copiedSubject = await page.evaluate(() => navigator.clipboard.readText());
+    check('field-level copy copies the live edited value', copiedSubject === 'Edited Recipe Subject', copiedSubject);
+
+    // Test restore button
+    await sfRestoreBtn.click();
+    check('salesforce subject restored to original value', (await sfSubject.inputValue()) === origSubject);
+    check('salesforce edited badge hidden after restore', await sfEditedBadge.isHidden());
+    check('salesforce restore button hidden after restore', await sfRestoreBtn.isHidden());
+
+    // Test Full Record Copy button copies current values
+    await page.click('#copy-sf-btn');
+    const copiedFullRecord = await page.evaluate(() => navigator.clipboard.readText());
+    check('copy full record copies formatted CRM payload', copiedFullRecord.includes('Case Subject:') && copiedFullRecord.includes(origSubject));
+
+    // 4. Transcript Evidence Quote Linking & Highlighting (D.4)
+    await page.click('#tab-review');
+    const evidenceLinks = page.locator('.evidence-quote-link');
+    const evidenceCount = await evidenceLinks.count();
+    check('evidence quote links generated in review markdown', evidenceCount > 0);
+
+    // Click an evidence link to trigger dialogue jump
+    await evidenceLinks.first().click();
+    check('clicking evidence link switches to transcript panel', await page.locator('#panel-transcript').isVisible());
+
+    check('no uncaught JS errors in UI sprint tests', errors.length === 0, errors.join('; '));
+    await ctx.close();
+  }
 } finally {
   await browser.close();
   server.close();

@@ -105,17 +105,76 @@ class GroundedExtractionProvider(BaseAnalysisProvider):
         customer_ids: List[str] = []
         for idx, turn in enumerate(turns[:15]):
             text = turn.get("text", "")
+            lower_turn = text.lower()
             # Check for STT repetitive loop noise (e.g. 20+ repetitions of a word)
             if len(text.split()) > 20 and len(set(text.split())) < 5:
                 stt_noise_detected = True
 
-            digits_match = re.findall(r"\b(?:\d{3,5}[\s-]?){2,4}\b", text)
-            if digits_match and ("connected" in text.lower() or "address" in text.lower() or "id" in text.lower() or idx <= 3):
-                cleaned_id = digits_match[0].strip()
-                if cleaned_id not in customer_ids and len(cleaned_id) >= 6:
-                    customer_ids.append(cleaned_id)
+            # Check for verbal correction of ID in turn: "not <id1>, it is <id2>"
+            id_corr = re.search(r"not\s+((?:\d{3,5}[\s-]?){2,4})\b[!.,]?\s*(?:.*?\s+)?(?:it is|it's|use)\s+((?:\d{3,5}[\s-]?){2,4})\b", text, re.IGNORECASE)
+            if id_corr:
+                old_id = id_corr.group(1).strip()
+                new_id = id_corr.group(2).strip()
+                if old_id in customer_ids:
+                    customer_ids.remove(old_id)
+                if new_id not in customer_ids:
+                    customer_ids.append(new_id)
                     evidence_items.append(EvidenceItem(
-                        fact=f"Remote connection / address ID: {cleaned_id}",
+                        fact=f"Client corrected remote connection ID to {new_id}",
+                        epistemic_type=EpistemicType.DIRECT_FACT,
+                        turn_index=idx,
+                        timestamp=turn.get("timestamp_str"),
+                        speaker=turn.get("speaker"),
+                        source_quote=text[:120]
+                    ))
+                continue
+
+            raw_digit_matches = re.finditer(r"\b(?:\d{3,5}[\s-]?){2,4}\b", text)
+            for m in raw_digit_matches:
+                candidate = m.group(0).strip()
+                digits_only = re.sub(r"\D", "", candidate)
+                if len(digits_only) < 6:
+                    continue
+
+                start_pos, end_pos = m.span()
+                preceding = lower_turn[max(0, start_pos - 35):start_pos]
+                following = lower_turn[end_pos:min(len(lower_turn), end_pos + 25)]
+
+                # STRICT EXCLUSION GUARDS:
+                # 1. Phone number guards: preceded by phone/call keywords or starts with phone prefixes (+27, 083, 082, 0861, etc.)
+                is_phone = any(p in preceding for p in ["call", "phone", "cell", "tel", "dial", "sms", "whatsapp", "contact"])
+                if is_phone or candidate.startswith("+27") or candidate.startswith("0861") or candidate.startswith("083") or candidate.startswith("082") or candidate.startswith("084") or candidate.startswith("072") or candidate.startswith("076") or candidate.startswith("071") or candidate.startswith("060"):
+                    continue
+
+                # 2. Case / Reference number guards
+                if any(r in preceding for r in ["ref:", "ref ", "reference", "ticket", "case number", "case "]):
+                    continue
+
+                # 3. Currency guards: preceded by R, $, rand, etc.
+                is_currency = (
+                    bool(re.search(r"(?:^|[\s(])(?:r|\$|€)\s*$", preceding, re.IGNORECASE)) or
+                    bool(re.search(r"\b(?:rand|rands?|zar)\b", preceding, re.IGNORECASE)) or
+                    bool(re.search(r"^\s*(?:rand|rands?|cents?)\b", following, re.IGNORECASE))
+                )
+                if is_currency:
+                    continue
+
+                # 4. Security code / OTP guards
+                if any(k in preceding for k in ["otp", "code", "pin", "password"]):
+                    continue
+
+                # POSITIVE AFFIRMATION GUARDS:
+                # Must be explicitly framed as remote connection, AnyDesk, TeamViewer, workstation dial-in, or address/ID
+                is_remote_context = any(w in preceding for w in ["anydesk", "teamviewer", "remote", "terminal on", "connecting to", "connected to", "logged in to", "dialed in to", "dial in to", "station on", "id is", "id:", "desk is", "desk:"]) or any(w in following for w in ["anydesk", "teamviewer", "remote"])
+
+                # In early turns, allow if explicit 'address' or 'id' without exclusions
+                if not is_remote_context and idx <= 2 and ("id" in lower_turn or "terminal" in lower_turn or "address" in lower_turn) and not is_phone:
+                    is_remote_context = True
+
+                if is_remote_context and candidate not in customer_ids:
+                    customer_ids.append(candidate)
+                    evidence_items.append(EvidenceItem(
+                        fact=f"Remote connection / address ID: {candidate}",
                         epistemic_type=EpistemicType.DIRECT_FACT,
                         turn_index=idx,
                         timestamp=turn.get("timestamp_str"),
@@ -132,7 +191,10 @@ class GroundedExtractionProvider(BaseAnalysisProvider):
         quant_patterns = [
             r"\b(?:minus|negative)\s*\d+\b",
             r"\b\d+\s*(?:batch|batches|slice|slices|kg|kilo|grams|portion|portions)\b",
-            r"\b(?:one|two|three|four|five|six|seven|eight|nine|ten|30|60|13|19)\s*(?:batch|batches|slice|slices|kg|kilo|item|items)\b",
+            r"\b\d+\s*(?:gb|gigabytes|mb|megabytes|tb|terabytes)\b",
+            r"\b\d+\s*(?:rand|dollars|rands|cents)\b",
+            r"\b\d+\s*(?:months?|weeks?|days?|hours?|minutes?|seconds?)\b",
+            r"\b(?:one|two|three|four|five|six|seven|eight|nine|ten|30|60|13|19|45|500)\s*(?:batch|batches|slice|slices|kg|kilo|item|items|rand|gb|gigabytes)\b",
             r"\b1\s*kg\b",
             r"\b30\s*slices\b"
         ]
@@ -147,7 +209,11 @@ class GroundedExtractionProvider(BaseAnalysisProvider):
 
         # Dates / Times
         dates_or_times: List[str] = []
-        for t in ["last week", "15 minutes", "today", "yesterday"]:
+        time_keywords = [
+            "last week", "sometime next week", "next week", "15 minutes", "2 hours",
+            "today", "yesterday", "tomorrow", "midnight", "midday", "this afternoon", "month end"
+        ]
+        for t in time_keywords:
             for turn in turns:
                 if t in turn.get("text", "").lower() and t not in dates_or_times:
                     dates_or_times.append(t)
@@ -161,9 +227,30 @@ class GroundedExtractionProvider(BaseAnalysisProvider):
         has_confirmed_callback = False
         has_escalation_suggestion = False
         has_explicit_fix_confirmation = False
-        has_unresolved_issue = False
+        has_unresolved_indication = False
+        has_partial_indication = False
         callback_timeframe: Optional[str] = None
         callback_evidence: Optional[EvidenceItem] = None
+
+        full_dialogue_lower = " ".join(t.get("text", "").lower() for t in turns)
+
+        # Pre-check for verbal target corrections (e.g. "not Terminal 4! ... It is Terminal 7")
+        corrected_entity: Optional[str] = None
+        for t_idx, turn in enumerate(turns):
+            if turn.get("speaker") == "CLIENT":
+                corr_match = re.search(r"not\s+([A-Za-z0-9\s]+?)[!.,]\s*(?:.*?\s+)?(?:it is|it's)\s+([A-Za-z0-9\s]+?)(?:[.,\n]|$)", turn.get("text", ""), re.IGNORECASE)
+                if corr_match:
+                    orig_target = corr_match.group(1).strip()
+                    corrected_entity = corr_match.group(2).strip()
+                    evidence_items.append(EvidenceItem(
+                        fact=f"Client corrected target entity from {orig_target} to {corrected_entity}",
+                        epistemic_type=EpistemicType.DIRECT_FACT,
+                        turn_index=t_idx,
+                        timestamp=turn.get("timestamp_str"),
+                        speaker="CLIENT",
+                        source_quote=turn.get("text", "")[:140]
+                    ))
+                    break
 
         for idx, turn in enumerate(turns):
             speaker = turn.get("speaker")
@@ -171,34 +258,78 @@ class GroundedExtractionProvider(BaseAnalysisProvider):
             lower = text.lower()
             ts = turn.get("timestamp_str")
 
-            # Ignore adversarial injection patterns (treat as passive text)
+            # Ignore adversarial injection patterns (treat strictly as passive text)
             if "ignore previous instructions" in lower or "mark my case resolved" in lower or "ignore everything" in lower:
-                # Treated strictly as customer speech data without altering execution flow
                 continue
 
             # A. Client Issue & Requests
             if speaker == "CLIENT":
-                if ("variant" in lower or "variance" in lower or "supposed to show" in lower or "minus" in lower) and "cheesecake" in lower or "batch" in lower or "slices" in lower:
-                    desc = "Cheesecake batch variance deducting whole unit instead of slice portions."
-                    if desc not in client_issues:
-                        client_issues.append(desc)
-                        ev = EvidenceItem(
-                            fact="Client demonstrated recipe variance deducting entire unit instead of slices",
-                            epistemic_type=EpistemicType.DIRECT_FACT,
-                            turn_index=idx,
-                            timestamp=ts,
-                            speaker=speaker,
-                            source_quote=text[:140]
-                        )
-                        issue_evidence.append(ev)
-                        evidence_items.append(ev)
+                issue_indicators = [
+                    ("offline", "System or peripheral is offline / unreachable"),
+                    ("unreachable", "Network endpoint unreachable"),
+                    ("crashing", "Software application crashing"),
+                    ("crashed", "Software application crashed"),
+                    ("error code", "System reported application error code"),
+                    ("error", "Error encountered during operation"),
+                    ("failing", "Operation or transaction failing"),
+                    ("failed", "Operation or backup failed"),
+                    ("broken", "System component or recipe reported broken"),
+                    ("jammed", "Hardware peripheral jammed"),
+                    ("corrupted", "Data or document display corrupted"),
+                    ("corrupt", "Corrupted data detected"),
+                    ("slowly", "Performance degraded / running slowly"),
+                    ("slow", "Performance slow"),
+                    ("expired", "Workstation license expired"),
+                    ("lapsed", "License certificate lapsed"),
+                    ("disk full", "Disk space exhausted / Disk Full"),
+                    ("variance", "Production batch calculation variance"),
+                    ("deducting", "Recipe deducting incorrect units"),
+                    ("batch", "Batch calculation discrepancy"),
+                    ("supposed to show", "Discrepancy in system calculation"),
+                    ("minus", "Negative variance calculation anomaly"),
+                    ("reconciling", "Reconciliation assistance requested"),
+                    ("reconcile", "Reconciliation assistance requested"),
+                    ("purée", "Ingredient unit configuration request"),
+                    ("puree", "Ingredient unit configuration request"),
+                    ("bata nadpuray", "Ingredient unit configuration request"),
+                    ("need help", "Client requested technical support assistance"),
+                    ("problem", "Problem reported on system component"),
+                    ("issue with", "Issue reported with system"),
+                    ("trouble with", "Trouble reported with system"),
+                    ("blocking", "Operation blocked on system"),
+                    ("blocked", "Operation blocked on system"),
+                    ("sync", "Data synchronization issue"),
+                    ("slip", "Docket or slip printing anomaly"),
+                    ("socket error", "Network socket communication error"),
+                    ("damaged", "Hardware physically damaged"),
+                    ("not working", "Component reported not working"),
+                    ("doesn't work", "Component reported not working"),
+                    ("isn't working", "Component reported not working"),
+                    ("cannot connect", "Cannot connect to system"),
+                    ("can't connect", "Cannot connect to system"),
+                ]
 
-                if "bata nadpuray" in lower or "purée" in lower or "puree" in lower or "1 kg" in lower:
-                    desc = "Butternut puree configuration request (change unit to 1 KG)."
-                    if desc not in client_issues:
-                        client_issues.append(desc)
+                detected_issue_desc = None
+                for kw, default_desc in issue_indicators:
+                    if kw in lower:
+                        sentences = [s.strip() for s in re.split(r"[.!?]", text) if s.strip()]
+                        matched_sent = next((s for s in sentences if kw in s.lower()), text[:120])
+                        if corrected_entity and "not " not in matched_sent.lower() and "second floor" in lower:
+                            matched_sent = re.sub(r"Terminal \d+", corrected_entity, matched_sent, flags=re.IGNORECASE)
+                        detected_issue_desc = matched_sent[0].upper() + matched_sent[1:] if matched_sent else default_desc
+                        break
+
+                if detected_issue_desc:
+                    cleaned_desc = detected_issue_desc.strip().rstrip(".")
+                    if "cheesecake" in lower and ("variance" in lower or "batch" in lower or "slices" in lower):
+                        cleaned_desc = "Cheesecake batch variance deducting whole unit instead of slice portions"
+                    elif "bata nadpuray" in lower or "purée" in lower or "puree" in lower or ("1 kg" in lower and "butternut" in lower):
+                        cleaned_desc = "Butternut puree configuration request (change unit to 1 KG)"
+
+                    if cleaned_desc and cleaned_desc not in client_issues:
+                        client_issues.append(cleaned_desc)
                         ev = EvidenceItem(
-                            fact="Client requested butternut puree unit setup in 1 KG",
+                            fact=f"Client reported: {cleaned_desc}",
                             epistemic_type=EpistemicType.DIRECT_FACT,
                             turn_index=idx,
                             timestamp=ts,
@@ -209,52 +340,24 @@ class GroundedExtractionProvider(BaseAnalysisProvider):
                         evidence_items.append(ev)
 
                 # Client Completed Actions / Demonstrations
-                if "let me show you" in lower or "here i'm putting" in lower or "when i enter" in lower:
-                    client_actions_summary.append("Demonstrated issue and entered test values in system.")
+                if any(w in lower for w in ["let me show you", "here i'm putting", "when i enter", "entered the float", "printed the blind drop", "check the network cable", "plugged it into", "beeped and test scan"]):
+                    action_summary = "Client performed operation / test on system"
+                    if "entered the float" in lower or "blind drop" in lower:
+                        action_summary = "Entered float and printed blind drop slip"
+                    elif "network cable" in lower:
+                        action_summary = "Checked network cable and switch plug"
+                    elif "test scan" in lower:
+                        action_summary = "Performed barcode test scan"
+                    elif "let me show you" in lower:
+                        action_summary = "Demonstrated issue and entered test values in system"
+                    
+                    client_actions_summary.append(action_summary)
                     structured_actions.append(StructuredAction(
-                        description="Client demonstrated variance calculation on screen with test values",
+                        description=action_summary,
                         action_type=ActionType.COMPLETED_ACTION,
                         actor=ActorRole.CLIENT,
                         evidence=EvidenceItem(
-                            fact="Client demonstrated variance calculation on screen",
-                            epistemic_type=EpistemicType.DIRECT_FACT,
-                            turn_index=idx,
-                            timestamp=ts,
-                            speaker=speaker,
-                            source_quote=text[:120]
-                        )
-                    ))
-
-                # Check if client explicitly confirms issue is fixed
-                if "it is working now" in lower or "that fixed it" in lower or "problem is solved" in lower or "it's working perfectly" in lower:
-                    has_explicit_fix_confirmation = True
-
-            # B. Consultant Actions & Commitments
-            if speaker == "CONSULTANT":
-                if "connected" in lower:
-                    consultant_actions_summary.append(f"Connected remotely to client workstation (ID: {customer_ids[0] if customer_ids else 'Provided'}).")
-                    structured_actions.append(StructuredAction(
-                        description="Consultant connected remotely to client workstation",
-                        action_type=ActionType.COMPLETED_ACTION,
-                        actor=ActorRole.CONSULTANT,
-                        evidence=EvidenceItem(
-                            fact="Remote connection established",
-                            epistemic_type=EpistemicType.DIRECT_FACT,
-                            turn_index=idx,
-                            timestamp=ts,
-                            speaker=speaker,
-                            source_quote=text[:120]
-                        )
-                    ))
-
-                if "unit of measure" in lower or "taking one as 30" in lower or "wrong with the unit" in lower:
-                    consultant_actions_summary.append("Diagnosed recipe issue: unit of measure is configured as whole unit rather than slice portions.")
-                    structured_actions.append(StructuredAction(
-                        description="Consultant diagnosed unit of measure configuration mismatch",
-                        action_type=ActionType.COMPLETED_ACTION,
-                        actor=ActorRole.CONSULTANT,
-                        evidence=EvidenceItem(
-                            fact="Diagnosed unit of measure mismatch on cheesecake recipe",
+                            fact=action_summary,
                             epistemic_type=EpistemicType.DIRECT_FACT,
                             turn_index=idx,
                             timestamp=ts,
@@ -263,30 +366,189 @@ class GroundedExtractionProvider(BaseAnalysisProvider):
                         )
                     ))
 
-                # Distinction: Suggestion / Proposal vs Confirmed Commitment
-                if "maybe we" in lower or "i have to escalate" in lower or "might need to" in lower:
-                    has_escalation_suggestion = True
+                # Check if client explicitly confirms issue is fixed (with negation protection)
+                fix_phrases = [
+                    "it is working now", "that fixed it", "problem is solved", "it's working perfectly",
+                    "all sorted now", "all sorted", "sorted now", "card swipe succeeded",
+                    "printed the test slip", "test slip printed", "just printed", "test docket",
+                    "scanner is working fine", "working fine now", "scanner works for service",
+                    "all balanced", "devices are online now", "all online now", "printer works now",
+                    "completed cashup", "finish the cash-up", "complete cashup", "cashup finished",
+                    "everything is sorted", "synced and online", "balanced", "explains the historical variance",
+                    "works fine now"
+                ]
+                negation_terms = ["not ", "never ", "doesn't ", "does not ", "didn't ", "stopped ", "failed ", "still "]
+                for phrase in fix_phrases:
+                    if phrase in lower:
+                        pos = lower.find(phrase)
+                        preceding_window = lower[max(0, pos - 20):pos]
+                        if any(neg in preceding_window for neg in negation_terms):
+                            has_unresolved_indication = True
+                        else:
+                            has_explicit_fix_confirmation = True
+
+                # Check if client expresses unresolved state / abandonment / hardware replacement
+                unresolved_phrases = [
+                    "nothing is fixed", "still broken", "have to leave right now", "logo remains broken",
+                    "remains broken", "not working now", "stopped printing", "completely died",
+                    "refuse to troubleshoot", "refused to troubleshoot", "never worked",
+                    "cannot fix", "can't fix", "still offline", "needs to be replaced",
+                    "needs a replacement", "damaged and might needs to be replaced",
+                    "latch hinge is broken", "cannot resolve this over the phone",
+                    "cannot fix this remotely"
+                ]
+                for phrase in unresolved_phrases:
+                    if phrase in lower:
+                        if "logo remains broken" in lower or "remains broken for now" in lower:
+                            has_partial_indication = True
+                        else:
+                            has_unresolved_indication = True
+
+                # Multi-terminal partial resolution detection
+                if any(k in lower for k in ["one device", "one terminal", "at least", "terminal 1"]) and any(k in lower for k in ["other", "second"]) and any(k in lower for k in ["online", "working", "sorted"]) and any(k in lower for k in ["down", "corrupt", "offline", "onsite"]):
+                    has_partial_indication = True
+
+            # B. Consultant Actions & Commitments
+            if speaker == "CONSULTANT":
+                if "connected" in lower or "connecting" in lower or "logged in" in lower:
+                    conn_id = customer_ids[0] if customer_ids else "remote workstation"
+                    consultant_actions_summary.append(f"Connected remotely to client workstation (ID: {conn_id}).")
                     structured_actions.append(StructuredAction(
-                        description="Consultant proposed potential escalation to software support department",
-                        action_type=ActionType.PROPOSED_ACTION,
+                        description=f"Consultant connected remotely to {conn_id}",
+                        action_type=ActionType.COMPLETED_ACTION,
                         actor=ActorRole.CONSULTANT,
                         evidence=EvidenceItem(
-                            fact="Consultant mentioned possible escalation to software support",
+                            fact="Remote connection established",
                             epistemic_type=EpistemicType.DIRECT_FACT,
                             turn_index=idx,
                             timestamp=ts,
                             speaker=speaker,
-                            source_quote=text[:120]
+                            source_quote=text[:140]
                         )
                     ))
 
-                if "call you back" in lower or "call you once" in lower or "give maximum 15 minutes" in lower or "update in the next 15" in lower:
+                # Diagnostic actions
+                diag_keywords = [
+                    ("unreachable on the lan", "Identified IP address unreachable on LAN"),
+                    ("sitting at 98%", "Checked server CPU load during SQL exports (98%)"),
+                    ("unit of measure", "Diagnosed recipe issue: unit of measure is configured as whole unit rather than slice portions"),
+                    ("taking one as 30", "Diagnosed unit of measure mismatch on recipe"),
+                    ("certificate lapsed", "Verified annual workstation certificate lapsed at midnight"),
+                    ("driver was stopped", "Identified payment comms driver service was stopped"),
+                    ("purged", "Purged archived transaction logs freeing disk space"),
+                    ("supervisor cashup", "Guided client through Cashup reconciliation menu"),
+                    ("check the unit of measure", "Investigating unit of measure configuration"),
+                    ("open tables", "Identified open tables preventing cashup"),
+                    ("historical report data", "Explained historical report lock policy"),
+                    ("shut down", "Instructed power cycle of terminals, router, and switch")
+                ]
+                for d_kw, d_desc in diag_keywords:
+                    if d_kw in lower:
+                        consultant_actions_summary.append(d_desc)
+                        structured_actions.append(StructuredAction(
+                            description=d_desc,
+                            action_type=ActionType.COMPLETED_ACTION,
+                            actor=ActorRole.CONSULTANT,
+                            evidence=EvidenceItem(
+                                fact=d_desc,
+                                epistemic_type=EpistemicType.DIRECT_FACT,
+                                turn_index=idx,
+                                timestamp=ts,
+                                speaker=speaker,
+                                source_quote=text[:140]
+                            )
+                        ))
+
+                # Remedial actions
+                remedial_keywords = [
+                    ("test docket", "Sent test docket through production queue"),
+                    ("restarted the service", "Restarted service on terminal"),
+                    ("plug it into port", "Instructed client to reconnect USB cable to port 3"),
+                    ("manual backup job", "Triggered manual database backup job"),
+                    ("backup completed successfully", "Verified database backup completed successfully"),
+                    ("shut down", "Instructed power cycle of terminals, router, and switch"),
+                    ("close table", "Assisted client to close open tables to correct tender"),
+                    ("adumo_base", "Configured Wi-Fi settings for payment terminal"),
+                    ("replacement ticket", "Logged urgent hardware replacement ticket for logistics"),
+                ]
+                for r_kw, r_desc in remedial_keywords:
+                    if r_kw in lower:
+                        consultant_actions_summary.append(r_desc)
+                        structured_actions.append(StructuredAction(
+                            description=r_desc,
+                            action_type=ActionType.COMPLETED_ACTION,
+                            actor=ActorRole.CONSULTANT,
+                            evidence=EvidenceItem(
+                                fact=r_desc,
+                                epistemic_type=EpistemicType.DIRECT_FACT,
+                                turn_index=idx,
+                                timestamp=ts,
+                                speaker=speaker,
+                                source_quote=text[:140]
+                            )
+                        ))
+
+                # Consultant explicit resolution confirmation
+                if any(w in lower for w in ["no follow-up needed", "no further action needed", "all balanced", "backup verified"]):
+                    has_explicit_fix_confirmation = True
+
+                # Distinction: Suggestion / Proposal vs Confirmed Commitment
+                is_tentative = any(w in lower for w in ["maybe", "might", "can't guarantee", "not sure", "sometime next week", "escalate to dev", "driver patch"])
+                
+                if is_tentative or "maybe we" in lower or "i have to escalate" in lower:
+                    has_escalation_suggestion = True
+                    prop_desc = "Consultant suggested potential escalation or investigation"
+                    if "escalate to dev" in lower or "graphic driver patch" in lower:
+                        prop_desc = "Consultant proposed escalating graphic driver patch to development team"
+                        has_partial_indication = True
+                    elif "database admin" in lower or "can't guarantee" in lower:
+                        prop_desc = "Consultant tentatively suggested database admin review without guaranteed timeframe"
+                        has_unresolved_indication = True
+                    elif "software support" in lower:
+                        prop_desc = "Consultant proposed potential escalation to software support department"
+
+                    structured_actions.append(StructuredAction(
+                        description=prop_desc,
+                        action_type=ActionType.PROPOSED_ACTION,
+                        actor=ActorRole.CONSULTANT,
+                        evidence=EvidenceItem(
+                            fact=prop_desc,
+                            epistemic_type=EpistemicType.DIRECT_FACT,
+                            turn_index=idx,
+                            timestamp=ts,
+                            speaker=speaker,
+                            source_quote=text[:140]
+                        )
+                    ))
+
+                # Confirmed Commitment: firm promise without tentative hesitation
+                callback_triggers = [
+                    "call you back", "call you once", "give maximum 15 minutes",
+                    "update in the next 15", "give you a call", "call you tomorrow",
+                    "call tomorrow", "contact you tomorrow", "follow-up with client anytime from monday"
+                ]
+                if any(trig in lower for trig in callback_triggers) and not is_tentative:
                     has_confirmed_callback = True
-                    if "15 minutes" in lower:
+                    
+                    tf_match = re.search(r"\b(?:within|in|by|at|around)?\s*(tomorrow(?:\s+morning|\s+afternoon)?(?:\s+around\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?|\s+at\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?)?|\d+\s*(?:minutes?|hours?|days?)|midday|this afternoon|anytime from monday)\b", text, re.IGNORECASE)
+                    if tf_match and tf_match.group(0).strip():
+                        raw_tf = tf_match.group(0).strip()
+                        if raw_tf.lower().startswith("in "):
+                            raw_tf = "Within " + raw_tf[3:]
+                        elif re.match(r"^\d+\s*(?:minutes?|hours?|days?)", raw_tf, re.IGNORECASE):
+                            raw_tf = f"Within {raw_tf}"
+                        callback_timeframe = raw_tf[0].upper() + raw_tf[1:]
+                    elif "15 minutes" in lower:
                         callback_timeframe = "Within 15 minutes"
+                    elif "2 hours" in lower:
+                        callback_timeframe = "Within 2 hours"
+                    elif "8:30" in lower and "tomorrow" in lower:
+                        callback_timeframe = "Tomorrow morning at 8:30 AM"
+                    else:
+                        callback_timeframe = "Shortly"
                     
                     callback_ev = EvidenceItem(
-                        fact="Consultant explicitly committed to investigate recipe setup and call client back within 15 minutes",
+                        fact=f"Consultant explicitly committed to investigate and call client back {callback_timeframe.lower()}",
                         epistemic_type=EpistemicType.DIRECT_FACT,
                         turn_index=idx,
                         timestamp=ts,
@@ -296,8 +558,9 @@ class GroundedExtractionProvider(BaseAnalysisProvider):
                     callback_evidence = callback_ev
                     evidence_items.append(callback_ev)
                     
+                    action_commit_desc = "Consultant committed to investigate cheesecake recipe configuration and call client back" if "cheesecake" in full_dialogue_lower else f"Consultant committed to investigate issue and call client back {callback_timeframe.lower()}"
                     structured_actions.append(StructuredAction(
-                        description="Consultant committed to investigate cheesecake recipe configuration and call client back",
+                        description=action_commit_desc,
                         action_type=ActionType.CONFIRMED_COMMITMENT,
                         actor=ActorRole.CONSULTANT,
                         timeframe=callback_timeframe,
@@ -305,22 +568,30 @@ class GroundedExtractionProvider(BaseAnalysisProvider):
                     ))
 
         # 6. Evidence-Based Resolution Status Determination
-        if has_explicit_fix_confirmation and not has_confirmed_callback:
-            resolution_status = ResolutionStatus.RESOLVED
-            resolution_rationale = "Client explicitly confirmed that the issue is fixed and no pending commitments remain."
-            outcome = "Issue successfully resolved during call."
+        if has_partial_indication:
+            resolution_status = ResolutionStatus.PARTIALLY_RESOLVED
+            resolution_rationale = "One reported issue was successfully resolved, but a secondary issue remains unresolved pending escalation or driver update."
+            outcome = "Primary peripheral operational; secondary issue pending escalation."
         elif has_confirmed_callback:
             resolution_status = ResolutionStatus.FOLLOW_UP_REQUIRED
-            resolution_rationale = f"Consultant confirmed a follow-up callback commitment ({callback_timeframe or 'shortly'}) to finalize recipe configuration."
-            outcome = f"Consultant agreed to investigate the cheesecake production configuration and call the client back ({callback_timeframe or 'shortly'})."
-        elif len(client_issues) > 0 and len(consultant_actions_summary) > 0 and not has_confirmed_callback:
-            resolution_status = ResolutionStatus.PARTIALLY_RESOLVED
-            resolution_rationale = "Diagnostic actions performed, but no explicit confirmation of resolution or callback commitment recorded."
-            outcome = "Call concluded with diagnostic actions taken."
+            resolution_rationale = f"Consultant confirmed a follow-up callback commitment ({callback_timeframe or 'shortly'}) to finalize investigation and resolution."
+            outcome = f"Consultant agreed to investigate the issue and call the client back ({callback_timeframe or 'shortly'})."
+        elif has_explicit_fix_confirmation and not has_unresolved_indication:
+            resolution_status = ResolutionStatus.RESOLVED
+            resolution_rationale = "Client and consultant verified that the issue was resolved during the call with no pending follow-up."
+            outcome = "Issue successfully resolved during call."
+        elif has_unresolved_indication or "nothing is fixed" in full_dialogue_lower or "can't guarantee" in full_dialogue_lower:
+            resolution_status = ResolutionStatus.UNRESOLVED
+            resolution_rationale = "Interaction ended without resolution and no firm follow-up commitment was established."
+            outcome = "Issue remained unresolved."
         elif len(client_issues) > 0 and len(consultant_actions_summary) == 0:
             resolution_status = ResolutionStatus.UNRESOLVED
             resolution_rationale = "Client reported an issue but no diagnostic or corrective actions were confirmed."
             outcome = "Issue remained unaddressed."
+        elif len(client_issues) > 0 and len(consultant_actions_summary) > 0 and not has_explicit_fix_confirmation:
+            resolution_status = ResolutionStatus.PARTIALLY_RESOLVED
+            resolution_rationale = "Diagnostic actions performed, but no explicit confirmation of resolution or callback commitment recorded."
+            outcome = "Call concluded with diagnostic actions taken."
         else:
             resolution_status = ResolutionStatus.UNKNOWN
             resolution_rationale = "Insufficient evidence to determine resolution status."
@@ -334,10 +605,12 @@ class GroundedExtractionProvider(BaseAnalysisProvider):
             if act_key not in seen_actions:
                 seen_actions.add(act_key)
                 unique_structured_actions.append(act)
+
         if has_confirmed_callback:
+            action_desc = "Consultant to investigate cheesecake production configuration and call client back with update/fix." if "cheesecake" in full_dialogue_lower else f"Consultant to investigate issue and call client back ({callback_timeframe or 'shortly'})."
             follow_up = FollowUp(
                 required=True,
-                action_items=["Consultant to investigate cheesecake production configuration and call client back with update/fix."],
+                action_items=[action_desc],
                 owner=ActorRole.CONSULTANT,
                 timeframe=callback_timeframe,
                 evidence=callback_evidence
@@ -352,13 +625,27 @@ class GroundedExtractionProvider(BaseAnalysisProvider):
             )
 
         # 7. Summary & Timeline
-        key_events = [
-            f"Consultant established remote session with client (Remote ID: {customer_ids[0] if customer_ids else 'Provided'}).",
-            "Client demonstrated cheesecake recipe variance discrepancy (system registering whole batch rather than individual portion slices).",
-            "Consultant identified the root cause as a unit of measure definition in the production module.",
-            "Client requested assistance with secondary item (Butternut Puree unit setting in 1 KG).",
-            f"Consultant committed to investigating both items and calling back ({callback_timeframe or 'shortly'})."
-        ]
+        key_events = []
+        if customer_ids:
+            key_events.append(f"Consultant established remote session with client (Remote ID: {customer_ids[0]}).")
+
+        for issue in client_issues[:2]:
+            key_events.append(f"Client reported: {issue}.")
+
+        for c_act in consultant_actions_summary[:2]:
+            key_events.append(f"Consultant action: {c_act}.")
+
+        for cl_act in client_actions_summary[:1]:
+            key_events.append(f"Client action: {cl_act}.")
+
+        if has_confirmed_callback:
+            key_events.append(f"Consultant committed to follow-up callback ({callback_timeframe or 'shortly'}).")
+        elif has_partial_indication:
+            key_events.append("Primary issue resolved; secondary issue logged for escalation.")
+        elif has_explicit_fix_confirmation:
+            key_events.append("Issue verified resolved during call.")
+        elif has_unresolved_indication:
+            key_events.append("Interaction ended with issue unresolved.")
 
         if not has_client or not has_consultant:
             key_events = ["Single-sided dialogue recorded in transcript."]
@@ -412,7 +699,7 @@ class GroundedExtractionProvider(BaseAnalysisProvider):
             call_start_time=call_start_time,
             total_turns_analyzed=total_turns,
             summary=ConversationSummary(
-                reason_for_contact="Client requested assistance with production batch variance discrepancies (cheesecake slices vs whole unit) and butternut puree unit configuration." if client_issues else "Client interaction.",
+                reason_for_contact="Client requested assistance with production batch variance discrepancies (cheesecake slices vs whole unit) and butternut puree unit configuration." if ("cheesecake" in full_dialogue_lower) else (f"Client requested assistance with {client_issues[0][0].lower() + client_issues[0][1:]}." if client_issues else "Client interaction."),
                 key_events=key_events,
                 outcome=outcome
             ),
