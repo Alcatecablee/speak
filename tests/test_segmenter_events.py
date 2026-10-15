@@ -196,5 +196,40 @@ class TestSegmenterAndEvents(unittest.TestCase):
         self.assertEqual(events[1].target_id, "target_terminal")
 
 
+    # 9. Numeric punctuation, currencies, IP addresses, and technical references preserved
+    def test_numeric_punctuation_and_technical_references_preserved(self):
+        text = "The amount was R149.99 on 192.168.1.50 running v2.2.0. The terminal works."
+        clauses = segment_turn(text, turn_index=0)
+        self.assertEqual(len(clauses), 2)
+
+        # Clause 0: "The amount was R149.99 on 192.168.1.50 running v2.2.0"
+        self.assertEqual(clauses[0].text, "The amount was R149.99 on 192.168.1.50 running v2.2.0")
+        self.assertEqual(text[clauses[0].span[0]:clauses[0].span[1]], clauses[0].text)
+
+        # Clause 1: "The terminal works"
+        self.assertEqual(clauses[1].text, "The terminal works")
+        self.assertEqual(text[clauses[1].span[0]:clauses[1].span[1]], clauses[1].text)
+
+        # Ensure spans are valid character slices in original text
+        for c in clauses:
+            start, end = c.span
+            self.assertEqual(text[start:end], c.text)
+
+    # 10. Multi-target action conjunctions (actions vs outcomes)
+    def test_multi_target_action_conjunctions(self):
+        text = "I rebooted terminal 1 and reseated the cable on printer 2, but both are still offline."
+        events = extract_turn_events(text, turn_index=0, speaker=ActorRole.CONSULTANT)
+        
+        # Must detect remedial actions on terminal 1 and printer 2
+        remedial_targets = [ev.target_id for ev in events if ev.claim_type == ClaimType.REMEDIAL_ACTION]
+        self.assertIn("target_pos_1", remedial_targets)
+        self.assertIn("target_printer_2", remedial_targets)
+
+        # Must detect failure on the contrastive clause
+        failure_events = [ev for ev in events if ev.claim_type == ClaimType.FAILURE_ASSERTION]
+        self.assertTrue(len(failure_events) >= 1)
+        self.assertEqual(failure_events[0].polarity, Polarity.AFFIRMATIVE)
+
+
 if __name__ == "__main__":
     unittest.main()

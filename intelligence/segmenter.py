@@ -143,12 +143,15 @@ def segment_turn(text: str, turn_index: int = 0) -> List[SegmentedClause]:
     # - ,?\s*\band\b(?=\s+[A-Za-z0-9_]+\s+(?:is|are|was|were|has|have|does|did|works|fails|failed|offline|broken|sorted))
     
     # Punctuation terminators and conjunctions
+    # Note: Period is only matched if not followed by a digit, and followed by whitespace or end-of-string.
+    # This protects currencies (R149.99), IP addresses (192.168.1.50), software versions (v2.2.0),
+    # and technical filenames (script.bat) from being damaged.
     split_pattern = re.compile(
-        r"(?:[.;!?\n]+|"
+        r"(?:;+|[!?\n]+|\.(?!\d)(?=[\x22\x27\)]*(?:\s+|$))|"
         r",\s*(?:but|however|although|whereas|while|though|yet|except that|except|on the other hand)\b|"
         r"\s+\b(?:but|however|although|whereas|though|yet)\b|"
         r",\s*and\b|"
-        r"\s+\band\b(?=\s+(?:(?:the\s+)?[A-Za-z0-9_]+\s+(?:is|are|was|were|has|have|does|did|works|fails|failed|offline|broken|sorted|rebooted|swapped)|(?:pinged|tested|checked|rebooted|restarted|swapped|replaced)\b)))",
+        r"\s+\band\b(?=\s+(?:(?:the\s+)?[A-Za-z0-9_]+\s+(?:is|are|was|were|has|have|does|did|works|fails|failed|offline|broken|sorted|rebooted|swapped)|(?:pinged|tested|checked|rebooted|restarted|reseated|swapped|replaced)\b)))",
         re.IGNORECASE
     )
 

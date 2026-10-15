@@ -128,6 +128,14 @@ def _extract_target_reference(text: str) -> Tuple[Optional[str], LinkConfidence]
         return "target_pos_2", LinkConfidence.EXPLICIT
 
     # Printers
+    m_p = re.search(r"\b(?:printer|bill printer|slip printer|kitchen printer|receipt printer)\s*(\d+)\b", lower)
+    if m_p:
+        return f"target_printer_{m_p.group(1)}", LinkConfidence.EXPLICIT
+    if re.search(r"\b(?:first|1st)\s+printer\b", lower):
+        return "target_printer_1", LinkConfidence.EXPLICIT
+    if re.search(r"\b(?:second|2nd)\s+printer\b", lower):
+        return "target_printer_2", LinkConfidence.EXPLICIT
+
     if "receipt printer" in lower or "slip printer" in lower:
         return "target_receipt_printer", LinkConfidence.EXPLICIT
     if "kitchen printer" in lower or "order printer" in lower:
