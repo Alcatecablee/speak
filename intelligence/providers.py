@@ -21,17 +21,27 @@ from intelligence.models import (
     ConversationAnalysis,
     ConversationSummary,
     EpistemicType,
+    EvidenceEvent,
     EvidenceItem,
     ExtractedEntities,
     FollowUp,
     NormalizedEntity,
     NormalizationMethod,
+    OperationalIssue,
+    RemoteIdCandidate,
+    RemoteIdStatus,
     ResolutionStatus,
+    ReviewReason,
     Sentiment,
     SentimentAnalysis,
     StructuredAction,
+    TargetEntity,
 )
+from intelligence.events import extract_turn_events
+from intelligence.linker import link_events
 from intelligence.normalizer import EntityNormalizer
+from intelligence.reducer import reduce_case
+from intelligence.remote_id import resolve_remote_ids
 
 logger = logging.getLogger("speak.intelligence")
 
@@ -101,86 +111,55 @@ class GroundedExtractionProvider(BaseAnalysisProvider):
         has_consultant = "CONSULTANT" in speakers_present
         has_client = "CLIENT" in speakers_present
 
-        # 2. Extract Customer Identifiers / Connection IDs
-        customer_ids: List[str] = []
-        for idx, turn in enumerate(turns[:15]):
+        # 2. Extract and Validate Remote Connection Identifiers via Step 6 Resolver
+        dialogue_tuples = [(t.get("speaker", "UNKNOWN"), t.get("text", "")) for t in turns]
+        remote_res = resolve_remote_ids(dialogue_tuples)
+        if remote_res.canonical_remote_id:
+            customer_ids = [remote_res.canonical_remote_id]
+            matching_cand = next((c for c in remote_res.candidates if c.value == remote_res.canonical_remote_id), None)
+            c_idx = matching_cand.turn_index if matching_cand else 0
+            evidence_items.append(EvidenceItem(
+                fact=f"Remote connection ID: {remote_res.canonical_remote_id}",
+                epistemic_type=EpistemicType.DIRECT_FACT,
+                turn_index=c_idx,
+                timestamp=turns[c_idx].get("timestamp_str") if c_idx < len(turns) else None,
+                speaker=turns[c_idx].get("speaker") if c_idx < len(turns) else "CLIENT",
+                source_quote=turns[c_idx].get("text", "")[:120] if c_idx < len(turns) else remote_res.canonical_remote_id
+            ))
+        else:
+            customer_ids = []
+
+        # Audit verbal corrections
+        superseded_cands = [c for c in remote_res.candidates if c.status == RemoteIdStatus.SUPERSEDED]
+        for sc in superseded_cands:
+            if remote_res.canonical_remote_id:
+                evidence_items.append(EvidenceItem(
+                    fact=f"Client corrected remote connection ID to {remote_res.canonical_remote_id}",
+                    epistemic_type=EpistemicType.DIRECT_FACT,
+                    turn_index=sc.turn_index,
+                    timestamp=turns[sc.turn_index].get("timestamp_str") if sc.turn_index < len(turns) else None,
+                    speaker="CLIENT",
+                    source_quote=turns[sc.turn_index].get("text", "")[:120] if sc.turn_index < len(turns) else ""
+                ))
+
+        case_refs = [oi.value for oi in remote_res.other_identifiers if oi.kind == "CASE_REFERENCE"]
+
+        # Check for STT repetitive loop noise (e.g. 20+ repetitions of a word)
+        for turn in turns[:15]:
             text = turn.get("text", "")
-            lower_turn = text.lower()
-            # Check for STT repetitive loop noise (e.g. 20+ repetitions of a word)
             if len(text.split()) > 20 and len(set(text.split())) < 5:
                 stt_noise_detected = True
 
-            # Check for verbal correction of ID in turn: "not <id1>, it is <id2>"
-            id_corr = re.search(r"not\s+((?:\d{3,5}[\s-]?){2,4})\b[!.,]?\s*(?:.*?\s+)?(?:it is|it's|use)\s+((?:\d{3,5}[\s-]?){2,4})\b", text, re.IGNORECASE)
-            if id_corr:
-                old_id = id_corr.group(1).strip()
-                new_id = id_corr.group(2).strip()
-                if old_id in customer_ids:
-                    customer_ids.remove(old_id)
-                if new_id not in customer_ids:
-                    customer_ids.append(new_id)
-                    evidence_items.append(EvidenceItem(
-                        fact=f"Client corrected remote connection ID to {new_id}",
-                        epistemic_type=EpistemicType.DIRECT_FACT,
-                        turn_index=idx,
-                        timestamp=turn.get("timestamp_str"),
-                        speaker=turn.get("speaker"),
-                        source_quote=text[:120]
-                    ))
-                continue
+        # 2b. Chronological Multi-Issue Event Extraction, Linking & Reduction
+        all_events: List[EvidenceEvent] = []
+        for idx, turn in enumerate(turns):
+            spk_str = turn.get("speaker", "UNKNOWN")
+            spk = ActorRole.CONSULTANT if spk_str.upper() == "CONSULTANT" else (ActorRole.CLIENT if spk_str.upper() == "CLIENT" else ActorRole.UNKNOWN)
+            t_text = turn.get("text", "")
+            all_events.extend(extract_turn_events(t_text, turn_index=idx, speaker=spk))
 
-            raw_digit_matches = re.finditer(r"\b(?:\d{3,5}[\s-]?){2,4}\b", text)
-            for m in raw_digit_matches:
-                candidate = m.group(0).strip()
-                digits_only = re.sub(r"\D", "", candidate)
-                if len(digits_only) < 6:
-                    continue
-
-                start_pos, end_pos = m.span()
-                preceding = lower_turn[max(0, start_pos - 35):start_pos]
-                following = lower_turn[end_pos:min(len(lower_turn), end_pos + 25)]
-
-                # STRICT EXCLUSION GUARDS:
-                # 1. Phone number guards: preceded by phone/call keywords or starts with phone prefixes (+27, 083, 082, 0861, etc.)
-                is_phone = any(p in preceding for p in ["call", "phone", "cell", "tel", "dial", "sms", "whatsapp", "contact"])
-                if is_phone or candidate.startswith("+27") or candidate.startswith("0861") or candidate.startswith("083") or candidate.startswith("082") or candidate.startswith("084") or candidate.startswith("072") or candidate.startswith("076") or candidate.startswith("071") or candidate.startswith("060"):
-                    continue
-
-                # 2. Case / Reference number guards
-                if any(r in preceding for r in ["ref:", "ref ", "reference", "ticket", "case number", "case "]):
-                    continue
-
-                # 3. Currency guards: preceded by R, $, rand, etc.
-                is_currency = (
-                    bool(re.search(r"(?:^|[\s(])(?:r|\$|€)\s*$", preceding, re.IGNORECASE)) or
-                    bool(re.search(r"\b(?:rand|rands?|zar)\b", preceding, re.IGNORECASE)) or
-                    bool(re.search(r"^\s*(?:rand|rands?|cents?)\b", following, re.IGNORECASE))
-                )
-                if is_currency:
-                    continue
-
-                # 4. Security code / OTP guards
-                if any(k in preceding for k in ["otp", "code", "pin", "password"]):
-                    continue
-
-                # POSITIVE AFFIRMATION GUARDS:
-                # Must be explicitly framed as remote connection, AnyDesk, TeamViewer, workstation dial-in, or address/ID
-                is_remote_context = any(w in preceding for w in ["anydesk", "teamviewer", "remote", "terminal on", "connecting to", "connected to", "logged in to", "dialed in to", "dial in to", "station on", "id is", "id:", "desk is", "desk:"]) or any(w in following for w in ["anydesk", "teamviewer", "remote"])
-
-                # In early turns, allow if explicit 'address' or 'id' without exclusions
-                if not is_remote_context and idx <= 2 and ("id" in lower_turn or "terminal" in lower_turn or "address" in lower_turn) and not is_phone:
-                    is_remote_context = True
-
-                if is_remote_context and candidate not in customer_ids:
-                    customer_ids.append(candidate)
-                    evidence_items.append(EvidenceItem(
-                        fact=f"Remote connection / address ID: {candidate}",
-                        epistemic_type=EpistemicType.DIRECT_FACT,
-                        turn_index=idx,
-                        timestamp=turn.get("timestamp_str"),
-                        speaker=turn.get("speaker"),
-                        source_quote=text[:120]
-                    ))
+        linking_res = link_events(all_events)
+        reduction_res = reduce_case(linking_res)
 
         # 3. Extract Normalized Entities with Provenance
         normalized_entities = self.normalizer.extract_and_normalize_all(turns)
@@ -568,14 +547,50 @@ class GroundedExtractionProvider(BaseAnalysisProvider):
                     ))
 
         # 6. Evidence-Based Resolution Status Determination
-        if has_partial_indication:
-            resolution_status = ResolutionStatus.PARTIALLY_RESOLVED
-            resolution_rationale = "One reported issue was successfully resolved, but a secondary issue remains unresolved pending escalation or driver update."
-            outcome = "Primary peripheral operational; secondary issue pending escalation."
-        elif has_confirmed_callback:
+        technical_resolution_status = reduction_res.technical_resolution_status
+
+        if has_confirmed_callback:
             resolution_status = ResolutionStatus.FOLLOW_UP_REQUIRED
             resolution_rationale = f"Consultant confirmed a follow-up callback commitment ({callback_timeframe or 'shortly'}) to finalize investigation and resolution."
             outcome = f"Consultant agreed to investigate the issue and call the client back ({callback_timeframe or 'shortly'})."
+        elif reduction_res.review_required and any(
+            r in ("GLOBAL_RESOLUTION_AMBIGUITY", "AMBIGUOUS_GLOBAL_RESOLUTION") or "GLOBAL" in str(r)
+            for r in reduction_res.review_reasons
+        ):
+            resolution_status = ResolutionStatus.UNKNOWN
+            resolution_rationale = "Ambiguous resolution claim with multiple open issues requires human review."
+            outcome = "Interaction concluded with ambiguous resolution claim."
+        elif len(reduction_res.issues) > 1:
+            resolution_status = reduction_res.technical_resolution_status
+            if resolution_status == ResolutionStatus.PARTIALLY_RESOLVED:
+                resolution_rationale = f"Multi-issue reduction: some issues resolved, but others remain open or unresolved across {len(reduction_res.issues)} tracked issues."
+                outcome = "Primary peripheral operational; secondary issue remains unaddressed."
+            elif resolution_status == ResolutionStatus.RESOLVED:
+                resolution_rationale = f"All {len(reduction_res.issues)} tracked issues successfully resolved during call."
+                outcome = "All issues successfully resolved during call."
+            elif resolution_status == ResolutionStatus.UNRESOLVED:
+                resolution_rationale = f"Interaction ended without resolving any of the {len(reduction_res.issues)} tracked issues."
+                outcome = "Issues remained unresolved."
+            else:
+                resolution_status = ResolutionStatus.UNKNOWN
+                resolution_rationale = "Insufficient evidence to verify multi-issue outcome."
+                outcome = "Interaction ended without clear resolution."
+        elif any(
+            k in str(r)
+            for r in reduction_res.outcome_reasons + reduction_res.review_reasons
+            for k in ["ISSUE_REGRESSION_AFTER_RESOLUTION", "RETROSPECTIVE_RESOLUTION_CLAIM"]
+        ):
+            resolution_status = reduction_res.technical_resolution_status
+            resolution_rationale = f"Chronological lifecycle reduction: {reduction_res.technical_resolution_status.value}."
+            outcome = "Issue remained unresolved after regression or retrospective failure."
+        elif reduction_res.technical_resolution_status == ResolutionStatus.RESOLVED and not has_unresolved_indication:
+            resolution_status = ResolutionStatus.RESOLVED
+            resolution_rationale = "Client and consultant verified that the issue was resolved during the call with no pending follow-up."
+            outcome = "Issue successfully resolved during call."
+        elif has_partial_indication:
+            resolution_status = ResolutionStatus.PARTIALLY_RESOLVED
+            resolution_rationale = "One reported issue was successfully resolved, but a secondary issue remains unresolved pending escalation or driver update."
+            outcome = "Primary peripheral operational; secondary issue pending escalation."
         elif has_explicit_fix_confirmation and not has_unresolved_indication:
             resolution_status = ResolutionStatus.RESOLVED
             resolution_rationale = "Client and consultant verified that the issue was resolved during the call with no pending follow-up."
@@ -677,6 +692,16 @@ class GroundedExtractionProvider(BaseAnalysisProvider):
         if has_escalation_suggestion and not has_confirmed_callback:
             review_notes_list.append("Escalation was suggested but not confirmed as a commitment.")
 
+        if remote_res.review_required:
+            for rr in remote_res.review_reasons:
+                if rr not in review_notes_list:
+                    review_notes_list.append(rr)
+
+        if reduction_res.review_required:
+            for rr in reduction_res.review_reasons:
+                if rr not in review_notes_list:
+                    review_notes_list.append(rr)
+
         if not review_notes_list:
             review_notes_list.append("High direct evidence across all claims. Confirmed callback and remote ID verified.")
 
@@ -694,6 +719,16 @@ class GroundedExtractionProvider(BaseAnalysisProvider):
             review_notes=" ".join(review_notes_list),
             stt_noise_detected=stt_noise_detected
         )
+
+        # Structured targets, issues, events and review reasons
+        structured_targets = list(linking_res.targets)
+        structured_issues = list(reduction_res.issues)
+        structured_events = list(linking_res.events)
+        all_review_reasons = list(dict.fromkeys(reduction_res.review_reasons + remote_res.review_reasons))
+        review_required_flag = reduction_res.review_required or remote_res.review_required or (len(all_review_reasons) > 0)
+        review_reason_objects = [
+            ReviewReason(code=r, message=r) for r in all_review_reasons
+        ]
 
         return ConversationAnalysis(
             call_start_time=call_start_time,
@@ -719,7 +754,7 @@ class GroundedExtractionProvider(BaseAnalysisProvider):
             entities=ExtractedEntities(
                 normalized_entities=normalized_entities,
                 customer_identifiers=customer_ids,
-                case_or_reference_numbers=[],
+                case_or_reference_numbers=case_refs,
                 product_or_system_names=product_system_names,
                 quantities_or_numbers=quantities,
                 dates_or_times=dates_or_times,
@@ -727,7 +762,17 @@ class GroundedExtractionProvider(BaseAnalysisProvider):
             ),
             sentiment=sentiment_eval,
             evidence=evidence_items,
-            confidence=confidence
+            confidence=confidence,
+            technical_resolution_status=technical_resolution_status,
+            review_required=review_required_flag,
+            review_reasons=review_reason_objects,
+            outcome_reasons=reduction_res.outcome_reasons,
+            closure_blockers=reduction_res.closure_blockers,
+            field_flags=remote_res.field_review_flags,
+            targets=structured_targets,
+            issues=structured_issues,
+            events=structured_events,
+            remote_id_candidates=remote_res.candidates,
         )
 
 

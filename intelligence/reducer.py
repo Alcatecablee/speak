@@ -107,6 +107,10 @@ class PerIssueReducer:
         
         # 1. Process each event chronologically
         for ev in self.events:
+            if ev.temporal_scope == TemporalScope.RETROSPECTIVE_PAST and ev.claim_type == ClaimType.RESOLUTION_ASSERTION:
+                if "RETROSPECTIVE_RESOLUTION_CLAIM" not in self.outcome_reasons:
+                    self.outcome_reasons.append("RETROSPECTIVE_RESOLUTION_CLAIM")
+
             # Check if this event links to a specific issue
             if not ev.issue_id or ev.issue_id not in self.issues:
                 # If event was ambiguous, preserve review reason
@@ -176,7 +180,8 @@ class PerIssueReducer:
             if ev.temporal_scope == TemporalScope.RETROSPECTIVE_PAST:
                 # Retrospective past: "was working earlier", "worked fine yesterday"
                 # Does NOT resolve a current open issue!
-                pass
+                if "RETROSPECTIVE_RESOLUTION_CLAIM" not in self.outcome_reasons:
+                    self.outcome_reasons.append("RETROSPECTIVE_RESOLUTION_CLAIM")
             elif ev.temporal_scope == TemporalScope.PRESENT_OR_CURRENT:
                 # Confirmed current resolution
                 issue.current_state = IssueState.RESOLVED

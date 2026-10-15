@@ -109,8 +109,22 @@ class TestRemoteIdCandidateResolver(unittest.TestCase):
         self.assertIsNone(res.canonical_remote_id, "Must leave canonical ID blank when ambiguous")
         self.assertEqual(len(res.candidates), 2)
         self.assertTrue(res.review_required)
+        self.assertEqual(res.remote_id_status, RemoteIdStatus.AMBIGUOUS)
         self.assertIn("MULTIPLE_ACTIVE_REMOTE_IDS", res.review_reasons)
-        self.assertEqual(res.field_flags.get("Remote_Connection_ID__c"), "MULTIPLE_ACTIVE_REMOTE_IDS")
+        self.assertEqual(res.field_review_flags.get("Remote_Connection_ID__c"), "AMBIGUOUS")
+
+    # 5b. Regression protection: Sentinel string must NEVER appear as the actual ID value
+    def test_sentinel_never_emitted_as_remote_id_value(self):
+        """Proves MULTIPLE_ACTIVE_REMOTE_IDS sentinel never masquerades as operational data."""
+        dialogue = [
+            ("CLIENT", "AnyDesk for site one is 419 883 201."),
+            ("CLIENT", "Our other site AnyDesk is 501 229 884."),
+        ]
+        res = resolve_remote_ids(dialogue)
+        self.assertIsNone(res.canonical_remote_id)
+        self.assertNotEqual(res.canonical_remote_id, "MULTIPLE_ACTIVE_REMOTE_IDS")
+        self.assertNotIn("MULTIPLE_ACTIVE_REMOTE_IDS", [c.value for c in res.candidates if c.value])
+        self.assertEqual(res.remote_id_status, RemoteIdStatus.AMBIGUOUS)
 
     # 6. Spoken digits are never fabricated (Probe H)
     def test_spoken_digits_never_fabricated(self):
@@ -125,7 +139,7 @@ class TestRemoteIdCandidateResolver(unittest.TestCase):
         self.assertIsNone(res.candidates[0].value)
         self.assertEqual(res.candidates[0].status, RemoteIdStatus.REJECTED)
         self.assertIn("REMOTE_ID_UNPARSEABLE", res.candidates[0].rejected_reasons)
-        self.assertEqual(res.field_flags.get("Remote_Connection_ID__c"), "REMOTE_ID_UNPARSEABLE")
+        self.assertEqual(res.field_review_flags.get("Remote_Connection_ID__c"), "REMOTE_ID_UNPARSEABLE")
 
     # 7. Repeated confirmation of same ID is not ambiguous
     def test_repeated_confirmation_of_same_id(self):

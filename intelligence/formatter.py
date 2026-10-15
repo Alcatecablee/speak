@@ -259,7 +259,19 @@ def format_draft_salesforce_payload(analysis: ConversationAnalysis) -> Dict[str,
     Contains a complete, professional narrative case description for direct CRM entry.
     No automatic CRM mutation will occur without explicit consultant review and approval.
     """
-    subject = f"Production Recipe Variance - {analysis.entities.customer_identifiers[0] if analysis.entities.customer_identifiers else 'Client Call'}"
+    # Safeguard Remote Connection ID: must remain None when ambiguous; never emit sentinel
+    remote_conn_id = None
+    if analysis.entities and analysis.entities.customer_identifiers:
+        raw_id = analysis.entities.customer_identifiers[0]
+        is_ambiguous = (
+            getattr(analysis, "remote_id_status", None) == "AMBIGUOUS"
+            or analysis.field_flags.get("Remote_Connection_ID__c") == "AMBIGUOUS"
+            or raw_id == "MULTIPLE_ACTIVE_REMOTE_IDS"
+        )
+        if not is_ambiguous:
+            remote_conn_id = raw_id
+
+    subject = f"Production Recipe Variance - {remote_conn_id if remote_conn_id else 'Client Call'}"
     narrative_description = generate_narrative_case_summary(analysis)
     
     return {
@@ -272,7 +284,7 @@ def format_draft_salesforce_payload(analysis: ConversationAnalysis) -> Dict[str,
             "Description": narrative_description,
             "Status": "Pending Follow-up" if analysis.follow_up.required else ("Closed" if getattr(analysis.resolution_status, "value", analysis.resolution_status) == "RESOLVED" else "Open"),
             "Resolution_Category__c": "Production Configuration",
-            "Remote_Connection_ID__c": analysis.entities.customer_identifiers[0] if analysis.entities.customer_identifiers else None,
+            "Remote_Connection_ID__c": remote_conn_id,
             "Client_Sentiment__c": analysis.sentiment.sentiment.value if hasattr(analysis.sentiment.sentiment, "value") else str(analysis.sentiment.sentiment),
             "AI_Confidence_Score__c": analysis.confidence.score,
             "Internal_Review_Notes__c": analysis.confidence.review_notes

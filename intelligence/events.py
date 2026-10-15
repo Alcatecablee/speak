@@ -38,9 +38,11 @@ UNCERTAINTY_CUES = [
 
 FAILURE_LEXICON = [
     "fail", "failed", "fails", "failing", "failure", "broken", "offline", "jammed",
+    "jamming", "jam", "jams",
     "crashing", "crashes", "crashed", "corrupt", "damaged", "unreachable",
     "dead", "died", "error", "errors", "socket error", "stopped working",
-    "stopped printing", "not responding", "no response", "refused", "blank screen"
+    "stopped printing", "not responding", "no response", "refused", "blank screen",
+    "problem", "problems", "down", "trouble", "issue", "issues"
 ]
 
 RESOLUTION_LEXICON = [
@@ -56,6 +58,7 @@ DIAGNOSTIC_LEXICON = [
 
 REMEDIAL_LEXICON = [
     "rebooted", "reboot", "rebooting", "restarted", "restart", "restarting",
+    "shut down", "shutting down", "power down",
     "cleared spooler", "reseated", "re-cabled", "swapped", "power cycled",
     "reinstalled", "reset"
 ]
@@ -85,7 +88,7 @@ PRESENT_TEMPORAL_CUES = [
 ]
 
 # Negation words applied to predicates
-NEGATION_WORDS = ["not", "never", "no", "didn't", "did not", "doesn't", "does not", "won't", "cannot", "can't"]
+NEGATION_WORDS = ["not", "never", "no", "nothing", "neither", "didn't", "did not", "doesn't", "does not", "won't", "cannot", "can't"]
 
 
 def _detect_temporal_scope(text: str, discourse_marker: Optional[str] = None) -> TemporalScope:
@@ -112,52 +115,85 @@ def _detect_temporal_scope(text: str, discourse_marker: Optional[str] = None) ->
     return TemporalScope.PRESENT_OR_CURRENT
 
 
-def _extract_target_reference(text: str) -> Tuple[Optional[str], LinkConfidence]:
-    """Extracts candidate target equipment references from the clause."""
+def _extract_target_references(text: str) -> List[Tuple[Optional[str], LinkConfidence]]:
+    """Extracts all candidate target equipment references from the clause."""
     lower = text.lower()
-    
-    # Terminal ordinals
-    m = re.search(r"\b(?:pos|terminal|till)\s*(\d+)\b", lower)
-    if m:
-        return f"target_pos_{m.group(1)}", LinkConfidence.EXPLICIT
+    targets: List[Tuple[str, LinkConfidence]] = []
 
-    # Words for ordinals
+    # Plural / dual references: "both tills", "both terminals", "both printers", "two terminals", etc.
+    if re.search(r"\b(?:both|two|2)\s+(?:tills|terminals|pos)\b", lower):
+        return [("target_pos_1", LinkConfidence.EXPLICIT), ("target_pos_2", LinkConfidence.EXPLICIT)]
+    if re.search(r"\b(?:both|two|2)\s+printers\b", lower):
+        return [("target_printer_1", LinkConfidence.EXPLICIT), ("target_printer_2", LinkConfidence.EXPLICIT)]
+
+    # Ordinals
+    for m in re.finditer(r"\b(?:pos|terminal|till)\s*(\d+)\b", lower):
+        targets.append((f"target_pos_{m.group(1)}", LinkConfidence.EXPLICIT))
+
     if re.search(r"\b(?:first|1st)\s+(?:pos|terminal|till)\b", lower):
-        return "target_pos_1", LinkConfidence.EXPLICIT
+        targets.append(("target_pos_1", LinkConfidence.EXPLICIT))
     if re.search(r"\b(?:second|2nd)\s+(?:pos|terminal|till)\b", lower):
-        return "target_pos_2", LinkConfidence.EXPLICIT
+        targets.append(("target_pos_2", LinkConfidence.EXPLICIT))
 
-    # Printers
+    # Printers with ordinals
     m_p = re.search(r"\b(?:printer|bill printer|slip printer|kitchen printer|receipt printer)\s*(\d+)\b", lower)
     if m_p:
-        return f"target_printer_{m_p.group(1)}", LinkConfidence.EXPLICIT
+        targets.append((f"target_printer_{m_p.group(1)}", LinkConfidence.EXPLICIT))
     if re.search(r"\b(?:first|1st)\s+printer\b", lower):
-        return "target_printer_1", LinkConfidence.EXPLICIT
+        targets.append(("target_printer_1", LinkConfidence.EXPLICIT))
     if re.search(r"\b(?:second|2nd)\s+printer\b", lower):
-        return "target_printer_2", LinkConfidence.EXPLICIT
+        targets.append(("target_printer_2", LinkConfidence.EXPLICIT))
 
+    # Specific printers
     if "receipt printer" in lower or "slip printer" in lower:
-        return "target_receipt_printer", LinkConfidence.EXPLICIT
+        targets.append(("target_receipt_printer", LinkConfidence.EXPLICIT))
     if "kitchen printer" in lower or "order printer" in lower:
-        return "target_kitchen_printer", LinkConfidence.EXPLICIT
+        targets.append(("target_kitchen_printer", LinkConfidence.EXPLICIT))
     if "bill printer" in lower:
-        return "target_bill_printer", LinkConfidence.EXPLICIT
-    if "printer" in lower:
-        return "target_printer", LinkConfidence.EXPLICIT
+        targets.append(("target_bill_printer", LinkConfidence.EXPLICIT))
 
-    # Generic terminal / till
-    if "terminal" in lower or "till" in lower or "pos" in lower or "workstation" in lower:
-        return "target_terminal", LinkConfidence.EXPLICIT
+    # Generic printer (if no specific printer matched yet)
+    if "printer" in lower and not any("printer" in t[0] for t in targets):
+        targets.append(("target_printer", LinkConfidence.EXPLICIT))
+    elif "printing" in lower and not targets:
+        targets.append(("target_printer", LinkConfidence.EXPLICIT))
+
+    # Card terminal / Payment PED
+    if "card machine" in lower or re.search(r"\b(?:ped|pax|reader)\b", lower):
+        targets.append(("target_ped", LinkConfidence.EXPLICIT))
+    elif "card terminal" in lower:
+        targets.append(("target_terminal", LinkConfidence.EXPLICIT))
+
+    # Generic terminal / till (if not already matched)
+    if ("terminal" in lower or "till" in lower or "pos" in lower or "workstation" in lower) and not any(t[0].startswith("target_pos_") or t[0] == "target_terminal" for t in targets):
+        targets.append(("target_terminal", LinkConfidence.EXPLICIT))
 
     # Network
     if "switch" in lower or "router" in lower or "lan" in lower or "network" in lower:
-        return "target_network", LinkConfidence.EXPLICIT
+        targets.append(("target_network", LinkConfidence.EXPLICIT))
 
-    # Payment PED
-    if "card machine" in lower or "ped" in lower or "reader" in lower or "pax" in lower:
-        return "target_ped", LinkConfidence.EXPLICIT
+    # De-duplicate while preserving order
+    unique_targets: List[Tuple[str, LinkConfidence]] = []
+    seen = set()
+    for tid, conf in targets:
+        if tid not in seen:
+            seen.add(tid)
+            unique_targets.append((tid, conf))
 
-    return None, LinkConfidence.NONE
+    # If multiple targets extracted but no coordinating conjunction, it's an attributive specifier (e.g. 'POS1 bill printer')
+    has_conjunction = any(c in lower for c in [" and ", " as well as ", " & ", "both ", "two ", "2 "])
+    if not has_conjunction and len(unique_targets) > 1:
+        if any("printer" in t[0] for t in unique_targets) and any("pos" in t[0] or "terminal" in t[0] for t in unique_targets):
+            unique_targets = [t for t in unique_targets if "printer" in t[0]]
+
+    if not unique_targets:
+        return [(None, LinkConfidence.NONE)]
+    return unique_targets
+
+
+def _extract_target_reference(text: str) -> Tuple[Optional[str], LinkConfidence]:
+    """Single-target extractor returning the first detected target."""
+    return _extract_target_references(text)[0]
 
 
 def extract_events_from_clause(
@@ -181,8 +217,8 @@ def extract_events_from_clause(
     # 2. Temporal Scope
     temporal_scope = _detect_temporal_scope(text, clause.discourse_marker)
 
-    # 3. Target candidate
-    target_id, link_conf = _extract_target_reference(text)
+    # 3. Target candidates
+    target_refs = _extract_target_references(text)
 
     # 4. Check for Correlative 'not only' special casing
     # 'Not only does X work' -> This is an affirmative resolution, NOT a negation!
@@ -224,16 +260,16 @@ def extract_events_from_clause(
         claim_type = ClaimType.COMMITMENT
         polarity = Polarity.AFFIRMATIVE
 
-    # Failure Predicates: "failed", "broken", "offline", "jammed", "socket error"
-    elif any(re.search(r"\b" + f + r"\b", lower) for f in FAILURE_LEXICON):
+    # Failure Predicates: "failed", "broken", "offline", "jammed", "socket error", "problem"
+    elif any(re.search(r"\b" + f + r"\b", lower) and not (f == "down" and ("shut down" in lower or "power down" in lower)) for f in FAILURE_LEXICON):
         claim_type = ClaimType.FAILURE_ASSERTION
         if is_uncertain:
             polarity = Polarity.UNCERTAIN
-        elif has_negator:
+        elif re.search(r"\b(?:not|didn't|did not|never|no)\s+(?:fail|failed|broken|crash|crashed|error|errors|problem)\b", lower):
             # "has not failed", "didn't fail", "no errors"
             polarity = Polarity.NEGATED
         else:
-            # "failed", "is broken", "offline"
+            # "failed", "is broken", "offline", "not taking transactions", "not syncing"
             polarity = Polarity.AFFIRMATIVE
 
     # Resolution Predicates: "working", "works", "fixed", "sorted", "online"
@@ -251,32 +287,33 @@ def extract_events_from_clause(
             polarity = Polarity.AFFIRMATIVE
 
     # Elliptical failure / negative expressions: "printer does not", "second till doesn't"
-    elif has_negator and any(k in lower for k in ["does not", "doesn't", "is not", "isn't", "not"]) and target_id:
+    elif has_negator and any(k in lower for k in ["does not", "doesn't", "is not", "isn't", "not"]) and any(t[0] is not None for t in target_refs):
         claim_type = ClaimType.RESOLUTION_ASSERTION
         polarity = Polarity.NEGATED if not is_uncertain else Polarity.UNCERTAIN
 
-    # Construct the event
+    # Construct the event(s)
     review_reasons = []
     if polarity == Polarity.UNCERTAIN:
         review_reasons.append("UNCERTAIN_PREDICATE_EVIDENCE")
 
-    event = EvidenceEvent(
-        event_id=f"{event_id_prefix}.e0",
-        turn_index=clause.turn_index,
-        clause_index=clause.clause_index,
-        sub_index=0,
-        speaker=speaker,
-        claim_type=claim_type,
-        polarity=polarity,
-        temporal_scope=temporal_scope,
-        target_id=target_id,
-        issue_id=None,  # Not decided at extraction level
-        link_confidence=link_conf,
-        source_quote=text,
-        span=clause.span,
-        review_reasons=review_reasons
-    )
-    events.append(event)
+    for sub_idx, (t_id, link_conf) in enumerate(target_refs):
+        event = EvidenceEvent(
+            event_id=f"{event_id_prefix}.e{sub_idx}",
+            turn_index=clause.turn_index,
+            clause_index=clause.clause_index,
+            sub_index=sub_idx,
+            speaker=speaker,
+            claim_type=claim_type,
+            polarity=polarity,
+            temporal_scope=temporal_scope,
+            target_id=t_id,
+            issue_id=None,  # Not decided at extraction level
+            link_confidence=link_conf,
+            source_quote=text,
+            span=clause.span,
+            review_reasons=review_reasons
+        )
+        events.append(event)
     return events
 
 

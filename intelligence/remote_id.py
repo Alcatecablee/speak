@@ -43,7 +43,12 @@ class RemoteIdResolutionResult:
     other_identifiers: List[OtherIdentifier]
     review_required: bool
     review_reasons: List[str]
-    field_flags: Dict[str, str] = field(default_factory=dict)
+    remote_id_status: RemoteIdStatus = RemoteIdStatus.ACTIVE
+    field_review_flags: Dict[str, str] = field(default_factory=dict)
+
+    @property
+    def field_flags(self) -> Dict[str, str]:
+        return self.field_review_flags
 
 
 # --- Exclusion Lexicons ---
@@ -77,11 +82,12 @@ REMOTE_SOFTWARE_ANCHORS = [
     (RemoteIdAnchor.TEAMVIEWER, [r"\bteamviewer\b", r"\bteam viewer\b"]),
     (RemoteIdAnchor.GENERIC_REMOTE, [
         r"\bremote\s+(?:id|connection|session|access)\b",
-        r"\bscreen\s+share\b"
+        r"\bscreen\s+share\b",
+        r"\b(?:my\s+)?id\s+(?:is|:)\b"
     ]),
     (RemoteIdAnchor.POSITIONAL, [
-        r"\b(?:connected|connecting|logged in|station)\s+(?:on|to|via)\b",
-        r"\bconnect\s+to\s+your\s+machine\b"
+        r"\b(?:connected|connecting|logged in|dialed in|station)\s+(?:now\s+)?(?:on|to|via)?\b",
+        r"\bconnect\s+to\s+(?:your\s+)?(?:machine|terminal)\b"
     ])
 ]
 
@@ -110,7 +116,7 @@ class RemoteIdResolver:
         self.candidates: List[RemoteIdCandidate] = []
         self.other_identifiers: List[OtherIdentifier] = []
         self.review_reasons: List[str] = []
-        self.field_flags: Dict[str, str] = {}
+        self.field_review_flags: Dict[str, str] = {}
         self._candidate_counter = 0
 
     def _is_excluded(self, text: str, matched_str: str) -> Tuple[bool, Optional[str]]:
@@ -235,15 +241,15 @@ class RemoteIdResolver:
                     rejected_reasons=["REMOTE_ID_UNPARSEABLE"]
                 )
                 self.candidates.append(cand)
-                self.field_flags["Remote_Connection_ID__c"] = "REMOTE_ID_UNPARSEABLE"
+                self.field_review_flags["Remote_Connection_ID__c"] = "REMOTE_ID_UNPARSEABLE"
                 if "REMOTE_ID_UNPARSEABLE" not in self.review_reasons:
                     self.review_reasons.append("REMOTE_ID_UNPARSEABLE")
                 return
 
         # 3. Candidate Remote ID Numerical Patterns
-        # Matches 9-digit (3-3-3), 10-digit (3-3-4 / 4-3-3), or 13-digit
+        # Matches 9-digit (3-3-3), 10-digit (3-3-4 / 4-3-3), or multi-block station IDs (e.g. 20288 2622 06609)
         num_pattern = re.compile(
-            r"\b(?:\d{5}[-\s]?\d{4}[-\s]?\d{4}|\d{4}[-\s]?\d{3}[-\s]?\d{3}|\d{3}[-\s]?\d{3}[-\s]?\d{4}|\d{3}[-\s]?\d{3}[-\s]?\d{3})\b"
+            r"\b(?:\d{3,5}[-\s]?){2,4}\b"
         )
 
         matches = list(num_pattern.finditer(text))
@@ -258,6 +264,9 @@ class RemoteIdResolver:
 
         for match in matches:
             raw_match = match.group(0).strip()
+            digits_only = re.sub(r"\D", "", raw_match)
+            if len(digits_only) < 6 or len(digits_only) > 16:
+                continue
             
             # Gate 1: Exclusion Filters
             excluded, reason = self._is_excluded(text, raw_match)
@@ -265,9 +274,14 @@ class RemoteIdResolver:
                 continue
 
             # Gate 2: Anchor Validation
-            if anchor == RemoteIdAnchor.NONE:
-                # Bare number without remote tool context is rejected
-                continue
+            cand_anchor = anchor
+            if cand_anchor == RemoteIdAnchor.NONE:
+                if is_correction and any(c.status == RemoteIdStatus.ACTIVE for c in self.candidates):
+                    # Inherit anchor from the candidate being corrected
+                    cand_anchor = next((c.anchor for c in reversed(self.candidates) if c.status == RemoteIdStatus.ACTIVE), RemoteIdAnchor.GENERIC_REMOTE)
+                else:
+                    # Bare number without remote tool context is rejected
+                    continue
 
             normalized_val = _normalize_id_digits(raw_match)
 
@@ -293,7 +307,7 @@ class RemoteIdResolver:
                 turn_index=turn_index,
                 clause_index=0,
                 speaker=speaker,
-                anchor=anchor,
+                anchor=cand_anchor,
                 site_label=site_label,
                 target_id=target_id,
                 status=RemoteIdStatus.ACTIVE,
@@ -325,27 +339,29 @@ class RemoteIdResolver:
                 other_identifiers=self.other_identifiers,
                 review_required=len(self.review_reasons) > 0,
                 review_reasons=self.review_reasons,
-                field_flags=self.field_flags
+                remote_id_status=RemoteIdStatus.ACTIVE,
+                field_review_flags=self.field_review_flags
             )
 
         # Case 2: Zero active candidates
         if len(active_candidates) == 0:
+            zero_status = RemoteIdStatus.REJECTED if any(c.status == RemoteIdStatus.REJECTED for c in self.candidates) else RemoteIdStatus.REJECTED
             return RemoteIdResolutionResult(
                 canonical_remote_id=None,
                 candidates=self.candidates,
                 other_identifiers=self.other_identifiers,
                 review_required=len(self.review_reasons) > 0,
                 review_reasons=self.review_reasons,
-                field_flags=self.field_flags
+                remote_id_status=zero_status,
+                field_review_flags=self.field_review_flags
             )
 
         # Case 3: Multiple active candidates without explicit correction!
-        # Probe F & Probe "two IDs" condition:
         # Ambiguous remote connection target must NEVER pick the first ID arbitrarily!
-        # Leaves canonical_remote_id = None, attaches MULTIPLE_ACTIVE_REMOTE_IDS flag.
-        self.field_flags["Remote_Connection_ID__c"] = "MULTIPLE_ACTIVE_REMOTE_IDS"
+        # Leaves canonical_remote_id = None, sets remote_id_status = AMBIGUOUS.
         if "MULTIPLE_ACTIVE_REMOTE_IDS" not in self.review_reasons:
             self.review_reasons.append("MULTIPLE_ACTIVE_REMOTE_IDS")
+        self.field_review_flags["Remote_Connection_ID__c"] = "AMBIGUOUS"
 
         for c in active_candidates:
             c.status = RemoteIdStatus.AMBIGUOUS
@@ -356,7 +372,8 @@ class RemoteIdResolver:
             other_identifiers=self.other_identifiers,
             review_required=True,
             review_reasons=self.review_reasons,
-            field_flags=self.field_flags
+            remote_id_status=RemoteIdStatus.AMBIGUOUS,
+            field_review_flags=self.field_review_flags
         )
 
 

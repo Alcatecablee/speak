@@ -151,7 +151,7 @@ def segment_turn(text: str, turn_index: int = 0) -> List[SegmentedClause]:
         r",\s*(?:but|however|although|whereas|while|though|yet|except that|except|on the other hand)\b|"
         r"\s+\b(?:but|however|although|whereas|though|yet)\b|"
         r",\s*and\b|"
-        r"\s+\band\b(?=\s+(?:(?:the\s+)?[A-Za-z0-9_]+\s+(?:is|are|was|were|has|have|does|did|works|fails|failed|offline|broken|sorted|rebooted|swapped)|(?:pinged|tested|checked|rebooted|restarted|reseated|swapped|replaced)\b)))",
+        r"\s+\band\b(?=\s+(?:(?:(?:the|our|my|a|this)\s+)?(?:[A-Za-z0-9_]+\s+){1,3}(?:is|are|was|were|has|have|does|did|works|fails|failed|offline|broken|sorted|rebooted|swapped|remains|down)|(?:pinged|tested|checked|rebooted|restarted|reseated|swapped|replaced)\b)))",
         re.IGNORECASE
     )
 
@@ -162,6 +162,12 @@ def segment_turn(text: str, turn_index: int = 0) -> List[SegmentedClause]:
         m_start = match.start()
         m_end = match.end()
         delim = match.group(0).strip().lower()
+
+        # If bare 'and' without comma, ensure chunk_before has a predicate/verb
+        if delim == "and":
+            chunk_before = text[last_pos:m_start]
+            if not re.search(r"\b(is|are|was|were|has|have|had|offline|down|broken|sorted|fixed|failed|works|working|tested|restarted|rebooted)\b", chunk_before, re.I):
+                continue
 
         if m_start > last_pos:
             raw_segments.append((last_pos, m_start, None, False, False))

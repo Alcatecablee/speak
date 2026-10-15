@@ -205,6 +205,12 @@ class IssueLinker:
             # Check if this target already has an open issue for THIS specific category
             existing_issue = self._find_matching_open_issue(target_id, symptom_cat)
             
+            # Regression check: words like "again", "still", "back down" on the same target link to existing issue
+            if not existing_issue and target_id and any(re.search(r"\b" + w + r"\b", lower) for w in ["again", "still", "back down"]):
+                target_issues = [iss for iss in self.issues.values() if iss.target_id == target_id]
+                if target_issues:
+                    existing_issue = target_issues[-1]
+
             if existing_issue:
                 # Add to existing issue history
                 if linked_event.event_id not in existing_issue.event_history_ids:
@@ -303,7 +309,7 @@ class IssueLinker:
                     chosen_issue.event_history_ids.append(linked_event.event_id)
                     linked_event.issue_id = chosen_issue.issue_id
                     linked_event.link_confidence = LinkConfidence.INFERRED_UNIQUE
-                else:
+                elif len(open_issues) > 1:
                     # Approved Probe J2: Multiple open issues + "all sorted" -> AMBIGUOUS
                     linked_event.issue_id = None
                     linked_event.link_confidence = LinkConfidence.AMBIGUOUS
@@ -311,6 +317,9 @@ class IssueLinker:
                         linked_event.review_reasons.append("AMBIGUOUS_GLOBAL_RESOLUTION")
                     if "AMBIGUOUS_GLOBAL_RESOLUTION" not in self.review_reasons:
                         self.review_reasons.append("AMBIGUOUS_GLOBAL_RESOLUTION")
+                else:
+                    linked_event.issue_id = None
+                    linked_event.link_confidence = LinkConfidence.NONE
 
                 self.linked_events.append(linked_event)
                 return linked_event
