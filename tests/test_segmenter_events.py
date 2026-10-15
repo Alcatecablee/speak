@@ -231,5 +231,17 @@ class TestSegmenterAndEvents(unittest.TestCase):
         self.assertEqual(failure_events[0].polarity, Polarity.AFFIRMATIVE)
 
 
+    # 11. Abbreviations (e.g., i.e.) not split by sentence boundaries
+    def test_abbreviations_not_split(self):
+        text = "We checked peripherals, e.g. receipt printer and PED. All sorted."
+        clauses = segment_turn(text, turn_index=0)
+        self.assertEqual(len(clauses), 2)
+        self.assertEqual(clauses[0].text, "We checked peripherals, e.g. receipt printer and PED")
+        self.assertEqual(clauses[1].text, "All sorted")
+        for c in clauses:
+            start, end = c.span
+            self.assertEqual(text[start:end], c.text)
+
+
 if __name__ == "__main__":
     unittest.main()
