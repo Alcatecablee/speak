@@ -95,13 +95,13 @@ class TestRemoteIdGroundingReproducible(unittest.TestCase):
         self.assertNotIn("Remote_Connection_ID__c", sf_payload["fields"])
         self.assertNotIn("Remote_Connection_ID__c", disk_payload["fields"])
 
-        # 3. Key events must not claim established remote session
+        # 3. Key events must not claim established remote session, but factually state lack of verification
         self.assertFalse(any("established remote session" in ev for ev in analysis.summary.key_events))
-        self.assertTrue(any("no remote session established" in ev for ev in analysis.summary.key_events))
+        self.assertTrue(any("no remote connection was verified in this recording" in ev.lower() for ev in analysis.summary.key_events))
 
         # 4. Review notes must not claim verified connection
         self.assertNotIn("Confirmed callback and remote ID verified", analysis.confidence.review_notes)
-        self.assertIn("mentioned without verified connection", analysis.confidence.review_notes)
+        self.assertIn("no remote connection was verified in this recording", analysis.confidence.review_notes.lower())
 
         # 5. Narrative must not claim dial-in
         narrative = sf_payload["fields"]["Description"]

@@ -88,16 +88,17 @@ class TestHardenedIntelligence(unittest.TestCase):
         self.assertEqual(result.resolution_status, ResolutionStatus.UNKNOWN)
         self.assertFalse(result.follow_up.required)
 
-    # TEST 5: Conflicting statements / diagnostic action taken without fix confirmation
+    # TEST 5: Diagnostic statement without resolution or fix confirmation
     def test_05_conflicting_statements(self):
         data = {
             "merged_turns": [
                 {"speaker": "CLIENT", "text": "The batch has a variance on cheesecake", "timestamp_str": "10:00:00"},
-                {"speaker": "CONSULTANT", "text": "I checked the unit of measure.", "timestamp_str": "10:00:05"}
+                {"speaker": "CONSULTANT", "text": "I will check the unit of measure.", "timestamp_str": "10:00:05"}
             ]
         }
         result = self.provider.analyze(data)
-        self.assertEqual(result.resolution_status, ResolutionStatus.PARTIALLY_RESOLVED)
+        # Diagnostic investigation without remedial fix or customer confirmation must remain UNRESOLVED
+        self.assertEqual(result.resolution_status, ResolutionStatus.UNRESOLVED)
 
     # TEST 6: Client asks for something but consultant never confirms it
     def test_06_unconfirmed_client_request(self):

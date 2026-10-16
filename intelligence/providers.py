@@ -634,14 +634,14 @@ class GroundedExtractionProvider(BaseAnalysisProvider):
             resolution_status = ResolutionStatus.UNRESOLVED
             resolution_rationale = "Interaction ended without resolution and no firm follow-up commitment was established."
             outcome = "Issue remained unresolved."
-        elif len(client_issues) > 0 and len(consultant_actions_summary) == 0:
+        elif len(client_issues) > 0:
             resolution_status = ResolutionStatus.UNRESOLVED
-            resolution_rationale = "Client reported an issue but no diagnostic or corrective actions were confirmed."
-            outcome = "Issue remained unaddressed."
-        elif len(client_issues) > 0 and len(consultant_actions_summary) > 0 and not has_explicit_fix_confirmation:
-            resolution_status = ResolutionStatus.PARTIALLY_RESOLVED
-            resolution_rationale = "Diagnostic actions performed, but no explicit confirmation of resolution or callback commitment recorded."
-            outcome = "Call concluded with diagnostic actions taken."
+            if len(consultant_actions_summary) > 0:
+                resolution_rationale = "Diagnostic actions performed, but issue remains unresolved with no confirmed fix or remedial outcome."
+                outcome = "Call concluded with diagnostic actions taken; issue remains unresolved."
+            else:
+                resolution_rationale = "Client reported an issue but no diagnostic or corrective actions were confirmed."
+                outcome = "Issue remained unaddressed."
         else:
             resolution_status = ResolutionStatus.UNKNOWN
             resolution_rationale = "Insufficient evidence to determine resolution status."
@@ -679,7 +679,7 @@ class GroundedExtractionProvider(BaseAnalysisProvider):
         if verified_conn_id:
             key_events.append(f"Consultant established remote session with client (Remote ID: {verified_conn_id}).")
         elif customer_ids:
-            key_events.append(f"Client provided remote ID ({customer_ids[0]}); no remote session established.")
+            key_events.append(f"Remote ID mentioned ({customer_ids[0]}). No remote connection was verified in this recording.")
 
         for issue in client_issues[:2]:
             key_events.append(f"Client reported: {issue}.")
@@ -740,7 +740,7 @@ class GroundedExtractionProvider(BaseAnalysisProvider):
                     review_notes_list.append(rr)
 
         if customer_ids and not verified_conn_id:
-            unverified_msg = f"Remote ID {customer_ids[0]} mentioned without verified connection. Manual confirmation required before remote access."
+            unverified_msg = f"Remote ID {customer_ids[0]} was mentioned, but no remote connection was verified in this recording. Manual confirmation required before remote access."
             if unverified_msg not in review_notes_list:
                 review_notes_list.append(unverified_msg)
 
