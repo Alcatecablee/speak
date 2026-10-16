@@ -329,8 +329,6 @@ def format_draft_salesforce_payload(analysis: ConversationAnalysis) -> Dict[str,
         "fields": {
             "Subject": subject,
             "Description": narrative_description,
-            "Status": "Pending Follow-up" if (analysis.follow_up and analysis.follow_up.required) else "Open",
-            "Resolution_Category__c": None,
             "Remote_Connection_ID__c": remote_conn_id,
             "Client_Sentiment__c": analysis.sentiment.sentiment.value if hasattr(analysis.sentiment.sentiment, "value") else str(analysis.sentiment.sentiment),
             "AI_Confidence_Score__c": analysis.confidence.score,

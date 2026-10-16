@@ -73,13 +73,13 @@ class TestPhase0bSafeguards(unittest.TestCase):
                 f"Procedural 'work on' was falsely classified as resolution: {ev}",
             )
 
-    def test_consultant_claim_transitions_to_resolved_unconfirmed(self):
+    def test_consultant_remedial_action_transitions_to_action_unverified(self):
         """
         Consultant saying 'Reconnected comms' without client verification
-        transitions issue to RESOLVED_UNCONFIRMED, which blocks case closure.
+        transitions issue to REMEDIAL_ACTION_TAKEN_UNVERIFIED, which blocks case closure.
         """
         transcript_data = {
-            "session_id": "test_consultant_unconfirmed",
+            "session_id": "test_consultant_action_unverified",
             "merged_turns": [
                 {"speaker": "CLIENT", "timestamp_str": "10:00:00", "text": "Our card machine is offline."},
                 {"speaker": "CONSULTANT", "timestamp_str": "10:00:10", "text": "Reconnected comms."},
@@ -87,7 +87,39 @@ class TestPhase0bSafeguards(unittest.TestCase):
         }
         analysis = self.provider.analyze(transcript_data)
         
-        # Issue state must be RESOLVED_UNCONFIRMED, NOT RESOLVED
+        # Issue state must be REMEDIAL_ACTION_TAKEN_UNVERIFIED, NOT RESOLVED or RESOLVED_UNCONFIRMED
+        self.assertEqual(len(analysis.issues), 1)
+        self.assertEqual(analysis.issues[0].current_state, IssueState.REMEDIAL_ACTION_TAKEN_UNVERIFIED)
+        
+        # Overall technical status must be UNRESOLVED because no client verification occurred
+        self.assertEqual(analysis.resolution_status, ResolutionStatus.UNRESOLVED)
+        
+        # Closure blockers must explicitly contain the unverified remedial action notice
+        self.assertTrue(
+            any("REMEDIAL_ACTION_TAKEN_UNVERIFIED" in b for b in analysis.closure_blockers),
+            f"Expected REMEDIAL_ACTION_TAKEN_UNVERIFIED closure blocker, got: {analysis.closure_blockers}",
+        )
+
+        # Salesforce draft payload must omit unapproved Status and Resolution_Category__c
+        sf_payload = format_draft_salesforce_payload(analysis)
+        self.assertNotIn("Status", sf_payload["fields"])
+        self.assertNotIn("Resolution_Category__c", sf_payload["fields"])
+
+    def test_consultant_outcome_claim_transitions_to_resolved_unconfirmed(self):
+        """
+        Consultant saying 'Problem is resolved now' without client verification
+        transitions issue to RESOLVED_UNCONFIRMED, which blocks case closure.
+        """
+        transcript_data = {
+            "session_id": "test_consultant_outcome_unconfirmed",
+            "merged_turns": [
+                {"speaker": "CLIENT", "timestamp_str": "10:00:00", "text": "Our card machine is offline."},
+                {"speaker": "CONSULTANT", "timestamp_str": "10:00:10", "text": "That should fix it, problem is resolved."},
+            ],
+        }
+        analysis = self.provider.analyze(transcript_data)
+        
+        # Issue state must be RESOLVED_UNCONFIRMED
         self.assertEqual(len(analysis.issues), 1)
         self.assertEqual(analysis.issues[0].current_state, IssueState.RESOLVED_UNCONFIRMED)
         
@@ -100,10 +132,22 @@ class TestPhase0bSafeguards(unittest.TestCase):
             f"Expected RESOLVED_UNCONFIRMED closure blocker, got: {analysis.closure_blockers}",
         )
 
-        # Salesforce draft payload must NEVER be 'Closed'
-        sf_payload = format_draft_salesforce_payload(analysis)
-        self.assertNotEqual(sf_payload["fields"]["Status"], "Closed")
-        self.assertIn(sf_payload["fields"]["Status"], ["Pending Follow-up", "Open"])
+    def test_client_confirmation_after_remedial_action_resolves_issue(self):
+        """
+        Client confirming fix after consultant remedial action links and resolves issue.
+        """
+        transcript_data = {
+            "session_id": "test_remedial_then_client_confirmed",
+            "merged_turns": [
+                {"speaker": "CLIENT", "timestamp_str": "10:00:00", "text": "Our card machine is offline."},
+                {"speaker": "CONSULTANT", "timestamp_str": "10:00:10", "text": "Reconnected comms."},
+                {"speaker": "CLIENT", "timestamp_str": "10:00:20", "text": "Yes, card machine is working now!"},
+            ],
+        }
+        analysis = self.provider.analyze(transcript_data)
+        self.assertEqual(len(analysis.issues), 1)
+        self.assertEqual(analysis.issues[0].current_state, IssueState.RESOLVED)
+        self.assertEqual(analysis.resolution_status, ResolutionStatus.RESOLVED)
 
     def test_client_affirmative_resolution_resolves_issue(self):
         """Client confirming fix successfully resolves the issue."""
@@ -210,8 +254,8 @@ class TestPhase0bSafeguards(unittest.TestCase):
     # -------------------------------------------------------------------------
     # 4. Defect D3: Salesforce Draft Invariants
     # -------------------------------------------------------------------------
-    def test_salesforce_draft_status_never_closed_from_audio(self):
-        """Even if client says 'all sorted', Salesforce draft Status is NEVER Closed."""
+    def test_salesforce_draft_status_omitted(self):
+        """Draft payload omits Status to avoid guessing unapproved CRM picklist values."""
         transcript_data = {
             "session_id": "test_all_sorted_status",
             "merged_turns": [
@@ -221,13 +265,10 @@ class TestPhase0bSafeguards(unittest.TestCase):
         }
         analysis = self.provider.analyze(transcript_data)
         sf_payload = format_draft_salesforce_payload(analysis)
-        
-        # Audio alone cannot produce Closed status
-        self.assertNotEqual(sf_payload["fields"]["Status"], "Closed")
-        self.assertIn(sf_payload["fields"]["Status"], ["Pending Follow-up", "Open"])
+        self.assertNotIn("Status", sf_payload["fields"])
 
-    def test_salesforce_draft_resolution_category_is_none(self):
-        """Resolution_Category__c must be None (no invented picklist values)."""
+    def test_salesforce_draft_resolution_category_omitted(self):
+        """Resolution_Category__c must be omitted from payload (no nulls that wipe CRM fields)."""
         transcript_data = {
             "session_id": "test_res_cat_none",
             "merged_turns": [
@@ -237,7 +278,7 @@ class TestPhase0bSafeguards(unittest.TestCase):
         }
         analysis = self.provider.analyze(transcript_data)
         sf_payload = format_draft_salesforce_payload(analysis)
-        self.assertIsNone(sf_payload["fields"]["Resolution_Category__c"])
+        self.assertNotIn("Resolution_Category__c", sf_payload["fields"])
 
     def test_salesforce_draft_subject_is_dynamic(self):
         """Subject must be derived from actual grounded client issue, not hardcoded."""

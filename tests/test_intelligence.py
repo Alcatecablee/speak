@@ -396,9 +396,10 @@ class TestHardenedIntelligence(unittest.TestCase):
         self.assertNotIn("[CONFIRMED_COMMITMENT]", summary_prose)
         self.assertNotIn("[DRAFT CASE RECORD", summary_prose)
 
-        # 4. Payload integrity
+        # 4. Payload integrity (unapproved picklists and dangerous nulls omitted)
         self.assertEqual(payload["fields"]["Description"], summary_prose)
-        self.assertEqual(payload["fields"]["Status"], "Pending Follow-up")
+        self.assertNotIn("Status", payload["fields"])
+        self.assertNotIn("Resolution_Category__c", payload["fields"])
         self.assertEqual(payload["sobject"], "Case")
         self.assertEqual(payload["action"], "DRAFT_UPDATE")
 
