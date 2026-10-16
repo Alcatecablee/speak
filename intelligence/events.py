@@ -55,7 +55,7 @@ RESOLUTION_LEXICON = [
 
 DIAGNOSTIC_LEXICON = [
     "checked", "checking", "pinged", "ping", "tested", "testing", "inspected",
-    "looked at", "looking at", "verified", "verifying", "logged in to see"
+    "looked at", "looking at", "verified", "verifying", "logged in to see", "unreachable"
 ]
 
 REMEDIAL_LEXICON = [
@@ -82,7 +82,9 @@ PAST_TEMPORAL_CUES = [
 
 FUTURE_TEMPORAL_CUES = [
     "tomorrow", "later", "will", "going to", "will connect", "going to connect",
-    "let me connect", "about to connect", "sometime next week", "next monday", "shortly", "in 15 minutes"
+    "let me connect", "about to connect", "sometime next week", "next monday", "shortly", "in 15 minutes",
+    "let me", "let's", "lets", "let us", "about to", "i'll", "we'll", "plan to", "planning to", "intend to", "try to",
+    "in a few minutes", "in a moment"
 ]
 
 PRESENT_TEMPORAL_CUES = [

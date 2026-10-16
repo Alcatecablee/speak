@@ -196,10 +196,11 @@ class PerIssueReducer:
 
         # Rule B2: Remedial Action by Consultant (Fix Applied but Unverified by Client)
         elif ev.claim_type == ClaimType.REMEDIAL_ACTION and ev.speaker == ActorRole.CONSULTANT:
-            if issue.current_state in (IssueState.OPEN, IssueState.REMEDIAL_ACTION_TAKEN_UNVERIFIED):
-                issue.current_state = IssueState.REMEDIAL_ACTION_TAKEN_UNVERIFIED
-                if "CONSULTANT_REMEDIAL_ACTION_UNVERIFIED" not in self.outcome_reasons:
-                    self.outcome_reasons.append("CONSULTANT_REMEDIAL_ACTION_UNVERIFIED")
+            if ev.temporal_scope == TemporalScope.PRESENT_OR_CURRENT:
+                if issue.current_state in (IssueState.OPEN, IssueState.REMEDIAL_ACTION_TAKEN_UNVERIFIED):
+                    issue.current_state = IssueState.REMEDIAL_ACTION_TAKEN_UNVERIFIED
+                    if "CONSULTANT_REMEDIAL_ACTION_UNVERIFIED" not in self.outcome_reasons:
+                        self.outcome_reasons.append("CONSULTANT_REMEDIAL_ACTION_UNVERIFIED")
 
         # Rule C: Escalation Dispatch
         elif ev.claim_type == ClaimType.ESCALATION_DISPATCH:

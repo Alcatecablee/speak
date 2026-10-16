@@ -391,7 +391,11 @@ class IssueLinker:
             elif linked_event.claim_type == ClaimType.REMEDIAL_ACTION and len(self.issues) == 0:
                 # Consultant or client performs a remedial action without prior explicit failure statement
                 new_issue_id = self._generate_issue_id(target_id, symptom_cat)
-                init_state = IssueState.REMEDIAL_ACTION_TAKEN_UNVERIFIED if linked_event.speaker == ActorRole.CONSULTANT else IssueState.OPEN
+                init_state = (
+                    IssueState.REMEDIAL_ACTION_TAKEN_UNVERIFIED
+                    if (linked_event.speaker == ActorRole.CONSULTANT and linked_event.temporal_scope == TemporalScope.PRESENT_OR_CURRENT)
+                    else IssueState.OPEN
+                )
                 new_issue = OperationalIssue(
                     issue_id=new_issue_id,
                     target_id=target_id,
