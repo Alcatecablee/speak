@@ -31,9 +31,36 @@ logging.basicConfig(
 )
 logger = logging.getLogger("speak.server")
 
-# Instantiate security and session managers
+# Instantiate security manager
 auth_manager = AuthManager()
-session_manager = SessionManager(output_dir="recordings")
+
+# SessionManager is lazy-initialized and respects SPEAK_OUTPUT_DIR
+_session_manager: Optional[SessionManager] = None
+
+
+def get_default_output_dir() -> str:
+    return os.environ.get("SPEAK_OUTPUT_DIR", "recordings")
+
+
+def get_session_manager() -> SessionManager:
+    """Dependency provider for SessionManager, overridable in tests."""
+    if "app" in globals() and app and hasattr(app, "dependency_overrides"):
+        override = app.dependency_overrides.get(get_session_manager)
+        if override is not None:
+            return override()
+    global _session_manager
+    if _session_manager is None:
+        _session_manager = SessionManager(output_dir=get_default_output_dir())
+    return _session_manager
+
+
+class _LazySessionManagerProxy:
+    """Lazy proxy ensuring legacy module-level attribute access defers initialization."""
+    def __getattr__(self, name: str) -> Any:
+        return getattr(get_session_manager(), name)
+
+
+session_manager = _LazySessionManagerProxy()
 
 # Apply credential redaction filter to loggers to prevent token leakage
 redaction_filter = AuthSecretRedactionFilter(auth_manager)
@@ -41,11 +68,6 @@ logging.getLogger().addFilter(redaction_filter)
 for handler in logging.getLogger().handlers:
     handler.addFilter(redaction_filter)
 logger.addFilter(redaction_filter)
-
-
-def get_session_manager() -> SessionManager:
-    """Dependency provider for SessionManager, overridable in tests."""
-    return session_manager
 
 
 def get_auth_manager() -> AuthManager:
@@ -88,10 +110,11 @@ def verify_auth_token(
 async def lifespan(app: FastAPI):
     """Manages background processing worker startup and graceful shutdown."""
     logger.info("Initializing Speak Local Engine lifespan...")
-    session_manager.start_worker()
+    mgr = get_session_manager()
+    mgr.start_worker()
     yield
     logger.info("Shutting down Speak Local Engine lifespan...")
-    session_manager.shutdown_worker()
+    mgr.shutdown_worker()
 
 
 app = FastAPI(
