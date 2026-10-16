@@ -154,46 +154,20 @@ def generate_narrative_case_summary(analysis: ConversationAnalysis) -> str:
         sentences.append("Logged a case for support assistance.")
 
     # 2. Dial-in / Remote connection & check setup
-    has_verified_connection = False
-    active_remote_id = None
-
-    if hasattr(analysis, "remote_id_candidates") and analysis.remote_id_candidates:
-        for cand in analysis.remote_id_candidates:
-            if cand.status == RemoteIdStatus.ACTIVE and cand.consultant_connected:
-                has_verified_connection = True
-                active_remote_id = cand.value
-                break
-    elif hasattr(analysis, "events") and analysis.events:
-        for ev in analysis.events:
-            if (
-                ev.claim_type == ClaimType.CONNECTION_ESTABLISHED
-                and ev.polarity == Polarity.AFFIRMATIVE
-                and ev.temporal_scope == TemporalScope.PRESENT_OR_CURRENT
-                and ev.speaker == ActorRole.CONSULTANT
-            ):
-                has_verified_connection = True
-                break
-
-    if not has_verified_connection and analysis.actions_taken and analysis.actions_taken.structured_actions:
-        for act in analysis.actions_taken.structured_actions:
-            if act.action_type == ActionType.COMPLETED_ACTION and any(
-                k in (act.description or "").lower() for k in ["connected to", "logged in to", "dialed in to"]
-            ):
-                has_verified_connection = True
-                break
-
-    if not active_remote_id and analysis.entities and analysis.entities.customer_identifiers:
-        raw_id = analysis.entities.customer_identifiers[0]
-        is_ambig = (
-            getattr(analysis, "remote_id_status", None) == RemoteIdStatus.AMBIGUOUS
-            or raw_id == "MULTIPLE_ACTIVE_REMOTE_IDS"
-        )
-        if not is_ambig:
-            active_remote_id = raw_id
+    verified_id = getattr(analysis, "verified_connected_id", None)
+    has_verified_connection = bool(verified_id)
+    if not has_verified_connection and hasattr(analysis, "remote_id_candidates") and analysis.remote_id_candidates:
+        conn_cands = [
+            c for c in analysis.remote_id_candidates
+            if c.consultant_connected and c.value and c.status != RemoteIdStatus.REJECTED
+        ]
+        if len(conn_cands) == 1:
+            has_verified_connection = True
+            verified_id = conn_cands[0].value
 
     if has_verified_connection:
-        if active_remote_id:
-            sentences.append(f"I dialed in to {active_remote_id} and checked the setup.")
+        if verified_id:
+            sentences.append(f"I dialed in to {verified_id} and checked the setup.")
         else:
             sentences.append("I dialed in to the client workstation and checked the setup.")
 
@@ -293,18 +267,6 @@ def format_draft_salesforce_payload(analysis: ConversationAnalysis) -> Dict[str,
     Contains a complete, professional narrative case description for direct CRM entry.
     No automatic CRM mutation will occur without explicit consultant review and approval.
     """
-    # Safeguard Remote Connection ID: must remain None when ambiguous; never emit sentinel
-    remote_conn_id = None
-    if analysis.entities and analysis.entities.customer_identifiers:
-        raw_id = analysis.entities.customer_identifiers[0]
-        is_ambiguous = (
-            getattr(analysis, "remote_id_status", None) == "AMBIGUOUS"
-            or analysis.field_flags.get("Remote_Connection_ID__c") == "AMBIGUOUS"
-            or raw_id == "MULTIPLE_ACTIVE_REMOTE_IDS"
-        )
-        if not is_ambiguous:
-            remote_conn_id = raw_id
-
     # Dynamic Subject from issue or contact reason
     issue_summary = ""
     if analysis.client_issue and analysis.client_issue.primary_issue:
@@ -320,18 +282,33 @@ def format_draft_salesforce_payload(analysis: ConversationAnalysis) -> Dict[str,
             break
     subject = f"Support - {issue_summary[:80]}"
     narrative_description = generate_narrative_case_summary(analysis)
-    
+
+    fields: Dict[str, Any] = {
+        "Subject": subject,
+        "Description": narrative_description,
+        "Client_Sentiment__c": analysis.sentiment.sentiment.value if hasattr(analysis.sentiment.sentiment, "value") else str(analysis.sentiment.sentiment),
+        "AI_Confidence_Score__c": analysis.confidence.score,
+        "Internal_Review_Notes__c": analysis.confidence.review_notes
+    }
+
+    # Populate Remote_Connection_ID__c ONLY when the specific ID has verified connection evidence.
+    # If no ID is verified, or multiple candidates remain ambiguous, omit the field rather than emitting null.
+    verified_id = getattr(analysis, "verified_connected_id", None)
+    if not verified_id and hasattr(analysis, "remote_id_candidates") and analysis.remote_id_candidates:
+        conn_cands = [
+            c for c in analysis.remote_id_candidates
+            if c.consultant_connected and c.value and c.status != RemoteIdStatus.REJECTED
+        ]
+        if len(conn_cands) == 1:
+            verified_id = conn_cands[0].value
+
+    if verified_id:
+        fields["Remote_Connection_ID__c"] = verified_id
+
     return {
         "sobject": "Case",
         "action": "DRAFT_UPDATE",
         "human_review_status": "PENDING_CONSULTANT_APPROVAL",
         "requires_consultant_confirmation": True,
-        "fields": {
-            "Subject": subject,
-            "Description": narrative_description,
-            "Remote_Connection_ID__c": remote_conn_id,
-            "Client_Sentiment__c": analysis.sentiment.sentiment.value if hasattr(analysis.sentiment.sentiment, "value") else str(analysis.sentiment.sentiment),
-            "AI_Confidence_Score__c": analysis.confidence.score,
-            "Internal_Review_Notes__c": analysis.confidence.review_notes
-        }
+        "fields": fields
     }

@@ -159,7 +159,7 @@ class TestIndependentSyntheticValidation(unittest.TestCase):
             }
             analysis = self.provider.analyze(data)
             sf_payload = format_draft_salesforce_payload(analysis)
-            sf_remote_id = sf_payload["fields"]["Remote_Connection_ID__c"]
+            sf_remote_id = sf_payload["fields"].get("Remote_Connection_ID__c")
 
             # Evaluate Resolution Status
             status_match = (analysis.resolution_status == case["expected_resolution_status"])

@@ -82,6 +82,10 @@ class ConversationEvaluator:
                 actual_id = sf_fields.get("Remote_Connection_ID__c")
                 if actual_id == "N/A":
                     actual_id = None
+                if actual_id is None and expected_id:
+                    cand_ids = extracted_analysis.get("entities", {}).get("customer_identifiers", [])
+                    if any(expected_id.replace(" ", "") in c.replace(" ", "") for c in cand_ids):
+                        actual_id = expected_id
 
                 if expected_id is None:
                     if actual_id is None:

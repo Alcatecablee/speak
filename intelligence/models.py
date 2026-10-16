@@ -380,6 +380,14 @@ class ConversationAnalysis(BaseModel):
         default_factory=list,
         description="All evaluated remote connection candidates with provenance and safety statuses."
     )
+    verified_connected_id: Optional[str] = Field(
+        default=None,
+        description="Specific Remote ID with affirmative consultant connection evidence."
+    )
+    has_verified_connection: bool = Field(
+        default=False,
+        description="Whether affirmative connection evidence was established to a specific Remote ID."
+    )
 
     @model_validator(mode="before")
     @classmethod

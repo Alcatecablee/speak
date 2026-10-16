@@ -117,12 +117,16 @@ class GroundedExtractionProvider(BaseAnalysisProvider):
         # 2. Extract and Validate Remote Connection Identifiers via Step 6 Resolver
         dialogue_tuples = [(t.get("speaker", "UNKNOWN"), t.get("text", "")) for t in turns]
         remote_res = resolve_remote_ids(dialogue_tuples)
+        verified_conn_id = remote_res.verified_connected_id
+        has_verified_conn = (verified_conn_id is not None)
+
         if remote_res.canonical_remote_id:
             customer_ids = [remote_res.canonical_remote_id]
             matching_cand = next((c for c in remote_res.candidates if c.value == remote_res.canonical_remote_id), None)
             c_idx = matching_cand.turn_index if matching_cand else 0
+            ev_fact = f"Remote connection ID verified: {verified_conn_id}" if verified_conn_id else f"Remote connection ID mentioned: {remote_res.canonical_remote_id} (unverified connection)"
             evidence_items.append(EvidenceItem(
-                fact=f"Remote connection ID: {remote_res.canonical_remote_id}",
+                fact=ev_fact,
                 epistemic_type=EpistemicType.DIRECT_FACT,
                 turn_index=c_idx,
                 timestamp=turns[c_idx].get("timestamp_str") if c_idx < len(turns) else None,
@@ -404,15 +408,14 @@ class GroundedExtractionProvider(BaseAnalysisProvider):
                         c.consultant_connected for c in remote_res.candidates if getattr(c, "turn_index", None) == idx
                     )
                 )
-                if has_affirmative_conn:
-                    conn_id = customer_ids[0] if customer_ids else "remote workstation"
-                    consultant_actions_summary.append(f"Connected remotely to client workstation (ID: {conn_id}).")
+                if has_affirmative_conn and verified_conn_id:
+                    consultant_actions_summary.append(f"Connected remotely to client workstation (ID: {verified_conn_id}).")
                     structured_actions.append(StructuredAction(
-                        description=f"Consultant connected remotely to {conn_id}",
+                        description=f"Consultant connected remotely to {verified_conn_id}",
                         action_type=ActionType.COMPLETED_ACTION,
                         actor=ActorRole.CONSULTANT,
                         evidence=EvidenceItem(
-                            fact="Remote connection established",
+                            fact=f"Remote connection established to {verified_conn_id}",
                             epistemic_type=EpistemicType.DIRECT_FACT,
                             turn_index=idx,
                             timestamp=ts,
@@ -420,6 +423,11 @@ class GroundedExtractionProvider(BaseAnalysisProvider):
                             source_quote=text[:140]
                         )
                     ))
+
+                is_turn_prospective = any(
+                    re.search(r"\b" + kw + r"\b", lower)
+                    for kw in ["will", "going to", "let me", "let's", "lets", "let us", "about to", "i'll", "plan to", "planning to", "intend to", "try to", "shortly"]
+                )
 
                 # Diagnostic actions
                 diag_keywords = [
@@ -438,10 +446,12 @@ class GroundedExtractionProvider(BaseAnalysisProvider):
                 ]
                 for d_kw, d_desc in diag_keywords:
                     if d_kw in lower:
-                        consultant_actions_summary.append(d_desc)
+                        act_type = ActionType.PROPOSED_ACTION if is_turn_prospective else ActionType.COMPLETED_ACTION
+                        if act_type == ActionType.COMPLETED_ACTION:
+                            consultant_actions_summary.append(d_desc)
                         structured_actions.append(StructuredAction(
                             description=d_desc,
-                            action_type=ActionType.COMPLETED_ACTION,
+                            action_type=act_type,
                             actor=ActorRole.CONSULTANT,
                             evidence=EvidenceItem(
                                 fact=d_desc,
@@ -467,10 +477,12 @@ class GroundedExtractionProvider(BaseAnalysisProvider):
                 ]
                 for r_kw, r_desc in remedial_keywords:
                     if r_kw in lower:
-                        consultant_actions_summary.append(r_desc)
+                        act_type = ActionType.PROPOSED_ACTION if is_turn_prospective else ActionType.COMPLETED_ACTION
+                        if act_type == ActionType.COMPLETED_ACTION:
+                            consultant_actions_summary.append(r_desc)
                         structured_actions.append(StructuredAction(
                             description=r_desc,
-                            action_type=ActionType.COMPLETED_ACTION,
+                            action_type=act_type,
                             actor=ActorRole.CONSULTANT,
                             evidence=EvidenceItem(
                                 fact=r_desc,
@@ -664,8 +676,10 @@ class GroundedExtractionProvider(BaseAnalysisProvider):
 
         # 7. Summary & Timeline
         key_events = []
-        if customer_ids:
-            key_events.append(f"Consultant established remote session with client (Remote ID: {customer_ids[0]}).")
+        if verified_conn_id:
+            key_events.append(f"Consultant established remote session with client (Remote ID: {verified_conn_id}).")
+        elif customer_ids:
+            key_events.append(f"Client provided remote ID ({customer_ids[0]}); no remote session established.")
 
         for issue in client_issues[:2]:
             key_events.append(f"Client reported: {issue}.")
@@ -725,8 +739,18 @@ class GroundedExtractionProvider(BaseAnalysisProvider):
                 if rr not in review_notes_list:
                     review_notes_list.append(rr)
 
+        if customer_ids and not verified_conn_id:
+            unverified_msg = f"Remote ID {customer_ids[0]} mentioned without verified connection. Manual confirmation required before remote access."
+            if unverified_msg not in review_notes_list:
+                review_notes_list.append(unverified_msg)
+
         if not review_notes_list:
-            review_notes_list.append("High direct evidence across all claims. Confirmed callback and remote ID verified.")
+            notes = ["High direct evidence across all claims."]
+            if has_confirmed_callback:
+                notes.append("Confirmed callback commitment recorded.")
+            if verified_conn_id:
+                notes.append(f"Remote ID {verified_conn_id} verified with established connection.")
+            review_notes_list.append(" ".join(notes))
 
         confidence_score = max(0.1, min(1.0, confidence_score))
         if confidence_score >= 0.80:
@@ -796,6 +820,8 @@ class GroundedExtractionProvider(BaseAnalysisProvider):
             issues=structured_issues,
             events=structured_events,
             remote_id_candidates=remote_res.candidates,
+            verified_connected_id=verified_conn_id,
+            has_verified_connection=has_verified_conn,
         )
 
 

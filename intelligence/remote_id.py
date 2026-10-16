@@ -45,6 +45,7 @@ class RemoteIdResolutionResult:
     review_reasons: List[str]
     remote_id_status: RemoteIdStatus = RemoteIdStatus.ACTIVE
     field_review_flags: Dict[str, str] = field(default_factory=dict)
+    verified_connected_id: Optional[str] = None
 
     @property
     def field_flags(self) -> Dict[str, str]:
@@ -109,23 +110,68 @@ def _normalize_id_digits(raw: str) -> str:
     return raw.strip()
 
 
-def _is_affirmative_current_connection(text: str, speaker: ActorRole) -> bool:
+def _is_affirmative_connection_clause(clause_text: str) -> bool:
+    """Evaluates whether an individual clause expresses an affirmative current connection."""
+    lower = clause_text.lower().strip()
+    # Connection predicate keywords
+    has_conn_pred = any(
+        re.search(r"\b" + p + r"\b", lower)
+        for p in [
+            "connected", "connecting", "logged in", "dialed in",
+            "remoting in", "remoted in", "dialing in"
+        ]
+    ) or ("checking" in lower and any(re.search(r"\b" + prep + r"\b", lower) for prep in ["on", "into", "terminal", "pos", "till", "device"]))
+    
+    if not has_conn_pred:
+        return False
+
+    # Must NOT contain negation
+    if any(re.search(r"\b" + nw + r"\b", lower) for nw in [
+        "not", "never", "cannot", "can't", "no", "didn't", "failed to",
+        "disconnected", "won't", "refuse", "declined", "not connected", "cannot connect"
+    ]):
+        return False
+
+    # Must NOT be retrospective past
+    if any(re.search(r"\b" + pw + r"\b", lower) for pw in [
+        "earlier", "was connected", "were connected", "previously", "yesterday", "before"
+    ]):
+        return False
+
+    # Must NOT be prospective future
+    if any(re.search(r"\b" + fw + r"\b", lower) for fw in [
+        "will connect", "going to connect", "let me connect", "about to connect",
+        "can connect", "will", "going to", "let me", "let's", "lets", "about to",
+        "shortly", "in a few minutes", "later", "tomorrow", "plan to", "planning to"
+    ]):
+        return False
+
+    return True
+
+
+def _is_affirmative_current_connection(
+    text: str,
+    speaker: ActorRole,
+    target_val: Optional[str] = None,
+    multiple_candidates_present: bool = False
+) -> bool:
     """Verifies that the turn contains an affirmative, current consultant connection."""
     if speaker != ActorRole.CONSULTANT:
         return False
-    lower = text.lower()
-    # Must contain connection predicate
-    if not any(k in lower for k in ["connected", "logged in", "dialed in"]):
+    sentences = re.split(r"[.!?;\n]|\bbut\b", text)
+    has_conn_clause = any(_is_affirmative_connection_clause(sent) for sent in sentences)
+    if not has_conn_clause:
         return False
-    # Must NOT contain negation
-    if any(re.search(r"\b" + nw + r"\b", lower) for nw in ["not", "never", "cannot", "can't", "no", "didn't", "failed to", "disconnected"]):
+
+    # If there are multiple candidate IDs present, target_val must be specifically bound in the connecting clause
+    if multiple_candidates_present and target_val:
+        digits_target = re.sub(r"\D", "", target_val)
+        for sent in sentences:
+            digits_sent = re.sub(r"\D", "", sent)
+            if digits_target and digits_target in digits_sent and _is_affirmative_connection_clause(sent):
+                return True
         return False
-    # Must NOT be retrospective past ("was connected earlier", "previously connected")
-    if any(re.search(r"\b" + pw + r"\b", lower) for pw in ["earlier", "was connected", "were connected", "previously", "yesterday", "before"]):
-        return False
-    # Must NOT be prospective future ("will connect", "going to connect", "let me connect")
-    if any(re.search(r"\b" + fw + r"\b", lower) for fw in ["will connect", "going to connect", "let me connect", "about to connect", "can connect"]):
-        return False
+
     return True
 
 
@@ -149,11 +195,17 @@ class RemoteIdResolver:
             if digits.startswith(pfx) or f"+27 {pfx[1:]}" in lower or f"+27{pfx[1:]}" in lower:
                 return True, "PHONE_PREFIX_EXCLUSION"
 
-        # Surrounding context windows (up to 30 chars before and after match)
+        # Surrounding context windows (up to 30 chars before and after match, bounded by sentence)
         pos = lower.find(matched_str.lower())
         if pos >= 0:
-            window_before = lower[max(0, pos - 30):pos]
-            window_after = lower[pos + len(matched_str):min(len(lower), pos + len(matched_str) + 30)]
+            raw_before = lower[max(0, pos - 30):pos]
+            raw_after = lower[pos + len(matched_str):min(len(lower), pos + len(matched_str) + 30)]
+
+            sent_bound_before = max(raw_before.rfind("."), raw_before.rfind("?"), raw_before.rfind("!"), raw_before.rfind("\n"), raw_before.rfind(";"))
+            window_before = raw_before[sent_bound_before + 1:] if sent_bound_before >= 0 else raw_before
+
+            sent_bound_after = min([p for p in [raw_after.find("."), raw_after.find("?"), raw_after.find("!"), raw_after.find("\n"), raw_after.find(";")] if p >= 0], default=-1)
+            window_after = raw_after[:sent_bound_after] if sent_bound_after >= 0 else raw_after
         else:
             window_before = lower
             window_after = ""
@@ -278,7 +330,11 @@ class RemoteIdResolver:
                 active_cands = [c for c in self.candidates if c.status == RemoteIdStatus.ACTIVE]
                 if len(active_cands) == 1:
                     active_cands[0].consultant_connected = True
-            elif speaker == ActorRole.CONSULTANT and any(re.search(r"\b" + nw + r"\b", lower) for nw in ["not connected", "disconnected", "cannot connect", "can't connect"]):
+                elif len(active_cands) > 1:
+                    if "AMBIGUOUS_CONNECTION_TARGET" not in self.review_reasons:
+                        self.review_reasons.append("AMBIGUOUS_CONNECTION_TARGET")
+                    self.field_review_flags["Remote_Connection_ID__c"] = "AMBIGUOUS"
+            elif speaker == ActorRole.CONSULTANT and any(re.search(r"\b" + nw + r"\b", lower) for nw in ["not connected", "disconnected", "cannot connect", "can't connect", "won't be remoting", "not remoting"]):
                 for c in self.candidates:
                     if c.status == RemoteIdStatus.ACTIVE:
                         c.consultant_connected = False
@@ -289,6 +345,9 @@ class RemoteIdResolver:
         is_correction = any(k in lower for k in [
             "not ", "sorry", "misread", "correct anydesk", "correct id", "use ", "instead of"
         ])
+
+        active_cands_count = len([c for c in self.candidates if c.status == RemoteIdStatus.ACTIVE])
+        multiple_cands_present = (len(matches) > 1) or (active_cands_count > 1)
 
         for match in matches:
             raw_match = match.group(0).strip()
@@ -301,16 +360,6 @@ class RemoteIdResolver:
             if excluded:
                 continue
 
-            # Gate 2: Anchor Validation
-            cand_anchor = anchor
-            if cand_anchor == RemoteIdAnchor.NONE:
-                if is_correction and any(c.status == RemoteIdStatus.ACTIVE for c in self.candidates):
-                    # Inherit anchor from the candidate being corrected
-                    cand_anchor = next((c.anchor for c in reversed(self.candidates) if c.status == RemoteIdStatus.ACTIVE), RemoteIdAnchor.GENERIC_REMOTE)
-                else:
-                    # Bare number without remote tool context is rejected
-                    continue
-
             normalized_val = _normalize_id_digits(raw_match)
 
             # Check if this exact ID was already recorded
@@ -321,11 +370,21 @@ class RemoteIdResolver:
 
             if existing_cand:
                 # Repeated mention of same ID
-                if _is_affirmative_current_connection(text, speaker):
+                if _is_affirmative_current_connection(text, speaker, normalized_val, multiple_cands_present):
                     existing_cand.consultant_connected = True
-                elif speaker == ActorRole.CONSULTANT and any(re.search(r"\b" + nw + r"\b", lower) for nw in ["not connected", "disconnected", "cannot connect", "can't connect"]):
+                elif speaker == ActorRole.CONSULTANT and any(re.search(r"\b" + nw + r"\b", lower) for nw in ["not connected", "disconnected", "cannot connect", "can't connect", "won't be remoting", "not remoting"]):
                     existing_cand.consultant_connected = False
                 continue
+
+            # Gate 2: Anchor Validation
+            cand_anchor = anchor
+            if cand_anchor == RemoteIdAnchor.NONE:
+                if is_correction and any(c.status == RemoteIdStatus.ACTIVE for c in self.candidates):
+                    # Inherit anchor from the candidate being corrected
+                    cand_anchor = next((c.anchor for c in reversed(self.candidates) if c.status == RemoteIdStatus.ACTIVE), RemoteIdAnchor.GENERIC_REMOTE)
+                else:
+                    # Bare number without remote tool context is rejected
+                    continue
 
             # Create new candidate
             self._candidate_counter += 1
@@ -341,7 +400,7 @@ class RemoteIdResolver:
                 site_label=site_label,
                 target_id=target_id,
                 status=RemoteIdStatus.ACTIVE,
-                consultant_connected=_is_affirmative_current_connection(text, speaker)
+                consultant_connected=_is_affirmative_current_connection(text, speaker, normalized_val, multiple_cands_present)
             )
 
             # Gate 5: Verbal Correction Supersession
@@ -351,6 +410,9 @@ class RemoteIdResolver:
                     if prev.status == RemoteIdStatus.ACTIVE:
                         prev.status = RemoteIdStatus.SUPERSEDED
                         prev.superseded_by = cand_id
+                        if prev.consultant_connected:
+                            cand.consultant_connected = True
+                            prev.consultant_connected = False
 
             self.candidates.append(cand)
 
@@ -361,6 +423,21 @@ class RemoteIdResolver:
             if c.status == RemoteIdStatus.ACTIVE and c.value is not None
         ]
 
+        # Candidates with verified affirmative consultant connection
+        connected_candidates = [
+            c for c in self.candidates
+            if c.consultant_connected and c.value is not None and c.status != RemoteIdStatus.REJECTED
+        ]
+
+        verified_connected_id: Optional[str] = None
+        if len(connected_candidates) == 1:
+            verified_connected_id = connected_candidates[0].value
+        elif len(connected_candidates) > 1:
+            verified_connected_id = None
+            if "MULTIPLE_CONNECTED_IDS" not in self.review_reasons:
+                self.review_reasons.append("MULTIPLE_CONNECTED_IDS")
+            self.field_review_flags["Remote_Connection_ID__c"] = "AMBIGUOUS"
+
         # Case 1: Exactly one active candidate
         if len(active_candidates) == 1:
             return RemoteIdResolutionResult(
@@ -370,7 +447,8 @@ class RemoteIdResolver:
                 review_required=len(self.review_reasons) > 0,
                 review_reasons=self.review_reasons,
                 remote_id_status=RemoteIdStatus.ACTIVE,
-                field_review_flags=self.field_review_flags
+                field_review_flags=self.field_review_flags,
+                verified_connected_id=verified_connected_id
             )
 
         # Case 2: Zero active candidates
@@ -383,12 +461,25 @@ class RemoteIdResolver:
                 review_required=len(self.review_reasons) > 0,
                 review_reasons=self.review_reasons,
                 remote_id_status=zero_status,
-                field_review_flags=self.field_review_flags
+                field_review_flags=self.field_review_flags,
+                verified_connected_id=verified_connected_id
             )
 
-        # Case 3: Multiple active candidates without explicit correction!
-        # Ambiguous remote connection target must NEVER pick the first ID arbitrarily!
-        # Leaves canonical_remote_id = None, sets remote_id_status = AMBIGUOUS.
+        # Case 3: Multiple active candidates
+        if verified_connected_id:
+            # Exactly one candidate has affirmative connection verified!
+            return RemoteIdResolutionResult(
+                canonical_remote_id=verified_connected_id,
+                candidates=self.candidates,
+                other_identifiers=self.other_identifiers,
+                review_required=len(self.review_reasons) > 0,
+                review_reasons=self.review_reasons,
+                remote_id_status=RemoteIdStatus.ACTIVE,
+                field_review_flags=self.field_review_flags,
+                verified_connected_id=verified_connected_id
+            )
+
+        # Multiple active candidates without verified connection to one specific candidate:
         if "MULTIPLE_ACTIVE_REMOTE_IDS" not in self.review_reasons:
             self.review_reasons.append("MULTIPLE_ACTIVE_REMOTE_IDS")
         self.field_review_flags["Remote_Connection_ID__c"] = "AMBIGUOUS"
@@ -403,7 +494,8 @@ class RemoteIdResolver:
             review_required=True,
             review_reasons=self.review_reasons,
             remote_id_status=RemoteIdStatus.AMBIGUOUS,
-            field_review_flags=self.field_review_flags
+            field_review_flags=self.field_review_flags,
+            verified_connected_id=None
         )
 
 

@@ -45,7 +45,7 @@ def analyse(turns):
         ],
     }
     analysis = provider.analyze(data)
-    sf_id = format_draft_salesforce_payload(analysis)["fields"]["Remote_Connection_ID__c"]
+    sf_id = format_draft_salesforce_payload(analysis)["fields"].get("Remote_Connection_ID__c")
     return analysis, sf_id
 
 
