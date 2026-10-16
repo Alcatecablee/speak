@@ -126,6 +126,7 @@ class IssueState(str, Enum):
     """Lifecycle state of an individual operational issue."""
     OPEN = "OPEN"
     RESOLVED = "RESOLVED"
+    RESOLVED_UNCONFIRMED = "RESOLVED_UNCONFIRMED"
     UNRESOLVED_CONFIRMED = "UNRESOLVED_CONFIRMED"
     REVIEW = "REVIEW"
 

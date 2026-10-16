@@ -149,9 +149,10 @@ def segment_turn(text: str, turn_index: int = 0) -> List[SegmentedClause]:
     split_pattern = re.compile(
         r"(?:;+|[!?\n]+|(?<!\be\.g)(?<!\bi\.e)(?<!\bvs)\.(?!\d)(?=[\x22\x27\)]*(?:\s+|$))|"
         r",\s*(?:but|however|although|whereas|while|though|yet|except that|except|on the other hand)\b|"
+        r",(?=\s*(?:all sorted|all fixed|all good|sorted now|everything)\b)|"
         r"\s+\b(?:but|however|although|whereas|though|yet)\b|"
         r",\s*and\b|"
-        r"\s+\band\b(?=\s+(?:(?:(?:the|our|my|a|this)\s+)?(?:[A-Za-z0-9_]+\s+){1,3}(?:is|are|was|were|has|have|does|did|works|fails|failed|offline|broken|sorted|rebooted|swapped|remains|down)|(?:pinged|tested|checked|rebooted|restarted|reseated|swapped|replaced)\b)))",
+        r"\s+\band\b(?=\s+(?:(?:(?:the|our|my|a|this)\s+)?(?:[A-Za-z0-9_]+\s+){1,5}(?:is|are|was|were|has|have|does|did|works|fails|failed|offline|broken|sorted|rebooted|swapped|remains|down|jamming|jammed)|(?:pinged|tested|checked|rebooted|restarted|reseated|swapped|replaced)\b)))",
         re.IGNORECASE
     )
 

@@ -281,6 +281,9 @@ class GroundedExtractionProvider(BaseAnalysisProvider):
                     ("slip", "Docket or slip printing anomaly"),
                     ("socket error", "Network socket communication error"),
                     ("damaged", "Hardware physically damaged"),
+                    ("freezing", "Till application freezing"),
+                    ("freeze", "Till application freezing"),
+                    ("frozen", "Till application frozen"),
                     ("not working", "Component reported not working"),
                     ("doesn't work", "Component reported not working"),
                     ("isn't working", "Component reported not working"),
@@ -587,6 +590,14 @@ class GroundedExtractionProvider(BaseAnalysisProvider):
             resolution_status = ResolutionStatus.RESOLVED
             resolution_rationale = "Client and consultant verified that the issue was resolved during the call with no pending follow-up."
             outcome = "Issue successfully resolved during call."
+        elif reduction_res.technical_resolution_status == ResolutionStatus.UNRESOLVED and not has_partial_indication:
+            resolution_status = ResolutionStatus.UNRESOLVED
+            resolution_rationale = "Operational issue remains unresolved."
+            outcome = "Issue remained unresolved."
+        elif reduction_res.technical_resolution_status == ResolutionStatus.PARTIALLY_RESOLVED:
+            resolution_status = ResolutionStatus.PARTIALLY_RESOLVED
+            resolution_rationale = "One or more operational issues remain open or unresolved."
+            outcome = "Issue partially resolved."
         elif has_partial_indication:
             resolution_status = ResolutionStatus.PARTIALLY_RESOLVED
             resolution_rationale = "One reported issue was successfully resolved, but a secondary issue remains unresolved pending escalation or driver update."

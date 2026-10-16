@@ -6,7 +6,16 @@ and generates draft Salesforce case payloads explicitly marked for human review.
 
 import json
 from typing import Any, Dict
-from intelligence.models import ConversationAnalysis, EpistemicType
+from intelligence.models import (
+    ActionType,
+    ActorRole,
+    ClaimType,
+    ConversationAnalysis,
+    EpistemicType,
+    Polarity,
+    RemoteIdStatus,
+    TemporalScope,
+)
 
 
 def format_markdown_review(analysis: ConversationAnalysis) -> str:
@@ -145,31 +154,60 @@ def generate_narrative_case_summary(analysis: ConversationAnalysis) -> str:
         sentences.append("Logged a case for support assistance.")
 
     # 2. Dial-in / Remote connection & check setup
-    remote_id = None
-    if analysis.entities and analysis.entities.customer_identifiers:
-        remote_id = analysis.entities.customer_identifiers[0]
+    has_verified_connection = False
+    active_remote_id = None
 
-    if "cheesecake" in full_text or "recipe" in full_text:
-        target_ws = "MC1"
-        sentences.append(f"I dialed in to {target_ws} and checked the recipe setup.")
-    elif remote_id:
-        sentences.append(f"I dialed in to {remote_id} and checked the setup.")
-    elif any("remote" in (a.description or "").lower() for a in analysis.actions_taken.structured_actions):
-        sentences.append("I dialed in to the client workstation and checked the setup.")
-    else:
-        sentences.append("I checked the system setup.")
+    if hasattr(analysis, "remote_id_candidates") and analysis.remote_id_candidates:
+        for cand in analysis.remote_id_candidates:
+            if cand.status == RemoteIdStatus.ACTIVE and cand.consultant_connected:
+                has_verified_connection = True
+                active_remote_id = cand.value
+                break
+    elif hasattr(analysis, "events") and analysis.events:
+        for ev in analysis.events:
+            if (
+                ev.claim_type == ClaimType.CONNECTION_ESTABLISHED
+                and ev.polarity == Polarity.AFFIRMATIVE
+                and ev.temporal_scope == TemporalScope.PRESENT_OR_CURRENT
+                and ev.speaker == ActorRole.CONSULTANT
+            ):
+                has_verified_connection = True
+                break
+
+    if not has_verified_connection and analysis.actions_taken and analysis.actions_taken.structured_actions:
+        for act in analysis.actions_taken.structured_actions:
+            if act.action_type == ActionType.COMPLETED_ACTION and any(
+                k in (act.description or "").lower() for k in ["connected to", "logged in to", "dialed in to"]
+            ):
+                has_verified_connection = True
+                break
+
+    if not active_remote_id and analysis.entities and analysis.entities.customer_identifiers:
+        raw_id = analysis.entities.customer_identifiers[0]
+        is_ambig = (
+            getattr(analysis, "remote_id_status", None) == RemoteIdStatus.AMBIGUOUS
+            or raw_id == "MULTIPLE_ACTIVE_REMOTE_IDS"
+        )
+        if not is_ambig:
+            active_remote_id = raw_id
+
+    if has_verified_connection:
+        if active_remote_id:
+            sentences.append(f"I dialed in to {active_remote_id} and checked the setup.")
+        else:
+            sentences.append("I dialed in to the client workstation and checked the setup.")
 
     # 3. Diagnostic finding
-    if "cheesecake" in full_text and ("slice" in full_text or "whole" in full_text or "variance" in full_text or "unit" in full_text):
-        sentences.append("The system was using the whole cheesecake instead of individual slices.")
-    else:
-        finding_added = False
+    finding_added = False
+    if analysis.actions_taken and analysis.actions_taken.structured_actions:
         for act in analysis.actions_taken.structured_actions:
             desc = (act.description or "").strip()
             if not desc:
                 continue
             desc_lower = desc.lower()
             if "connect" in desc_lower and "remote" in desc_lower:
+                continue
+            if act.action_type != ActionType.COMPLETED_ACTION:
                 continue
             if "diagnosed" in desc_lower or "found" in desc_lower or "mismatch" in desc_lower or "variance" in desc_lower:
                 clean_desc = desc
@@ -181,16 +219,15 @@ def generate_narrative_case_summary(analysis: ConversationAnalysis) -> str:
                 sentences.append(f"I found that {clean_desc[0].lower() + clean_desc[1:]}.")
                 finding_added = True
                 break
-        if not finding_added and analysis.actions_taken.consultant_actions:
-            for c_act in analysis.actions_taken.consultant_actions:
-                if "check" not in c_act.lower() and "connect" not in c_act.lower():
-                    sentences.append(f"I found {c_act.rstrip('.')}.")
-                    break
+    if not finding_added and analysis.actions_taken and analysis.actions_taken.consultant_actions:
+        for c_act in analysis.actions_taken.consultant_actions:
+            c_lower = c_act.lower()
+            if "check" not in c_lower and "connect" not in c_lower and not any(p in c_lower for p in ["will", "call back"]):
+                sentences.append(f"I found {c_act.rstrip('.')}.")
+                break
 
     # 4. Secondary client request
-    if "butternut" in full_text or any("butternut" in (d or "").lower() for d in (analysis.client_issue.details if analysis.client_issue else [])):
-        sentences.append("The client also asked for Butternut Puree to be set to 1 KG.")
-    elif analysis.client_issue and analysis.client_issue.details:
+    if analysis.client_issue and analysis.client_issue.details:
         for det in analysis.client_issue.details:
             det_clean = det.strip().rstrip(".")
             if not det_clean:
@@ -215,10 +252,7 @@ def generate_narrative_case_summary(analysis: ConversationAnalysis) -> str:
         else:
             tf_str = "shortly"
 
-        if "cheesecake" in full_text or "recipe" in full_text:
-            sentences.append(f"I will check the recipe setup and call the client back {tf_str}.")
-        else:
-            sentences.append(f"I will investigate and call the client back {tf_str}.")
+        sentences.append(f"I will investigate and call the client back {tf_str}.")
     elif analysis.summary and analysis.summary.outcome:
         out = analysis.summary.outcome.strip()
         if out:
@@ -271,7 +305,20 @@ def format_draft_salesforce_payload(analysis: ConversationAnalysis) -> Dict[str,
         if not is_ambiguous:
             remote_conn_id = raw_id
 
-    subject = f"Production Recipe Variance - {remote_conn_id if remote_conn_id else 'Client Call'}"
+    # Dynamic Subject from issue or contact reason
+    issue_summary = ""
+    if analysis.client_issue and analysis.client_issue.primary_issue:
+        issue_summary = analysis.client_issue.primary_issue.strip().rstrip(".")
+    elif analysis.summary and analysis.summary.reason_for_contact:
+        issue_summary = analysis.summary.reason_for_contact.strip().rstrip(".")
+    else:
+        issue_summary = "Client Support Call"
+
+    for pfx in ("The client contacted support regarding ", "Client reported ", "The customer reported "):
+        if issue_summary.startswith(pfx):
+            issue_summary = issue_summary[len(pfx):]
+            break
+    subject = f"Support - {issue_summary[:80]}"
     narrative_description = generate_narrative_case_summary(analysis)
     
     return {
@@ -282,8 +329,8 @@ def format_draft_salesforce_payload(analysis: ConversationAnalysis) -> Dict[str,
         "fields": {
             "Subject": subject,
             "Description": narrative_description,
-            "Status": "Pending Follow-up" if analysis.follow_up.required else ("Closed" if getattr(analysis.resolution_status, "value", analysis.resolution_status) == "RESOLVED" else "Open"),
-            "Resolution_Category__c": "Production Configuration",
+            "Status": "Pending Follow-up" if (analysis.follow_up and analysis.follow_up.required) else "Open",
+            "Resolution_Category__c": None,
             "Remote_Connection_ID__c": remote_conn_id,
             "Client_Sentiment__c": analysis.sentiment.sentiment.value if hasattr(analysis.sentiment.sentiment, "value") else str(analysis.sentiment.sentiment),
             "AI_Confidence_Score__c": analysis.confidence.score,

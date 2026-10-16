@@ -206,8 +206,10 @@ class IssueLinker:
             existing_issue = self._find_matching_open_issue(target_id, symptom_cat)
             
             # Regression check: words like "again", "still", "back down" on the same target link to existing issue
-            if not existing_issue and target_id and any(re.search(r"\b" + w + r"\b", lower) for w in ["again", "still", "back down"]):
-                target_issues = [iss for iss in self.issues.values() if iss.target_id == target_id]
+            if not existing_issue and any(re.search(r"\b" + w + r"\b", lower) for w in ["again", "still", "back down"]):
+                target_issues = [iss for iss in self.issues.values() if iss.target_id == target_id or (target_id == "target_printer" and iss.target_id and "printer" in iss.target_id)]
+                if not target_issues and len(self.issues) == 1:
+                    target_issues = list(self.issues.values())
                 if target_issues:
                     existing_issue = target_issues[-1]
 
@@ -243,6 +245,8 @@ class IssueLinker:
             # Case A: Explicit Target provided
             if target_id:
                 target_open_issues = self._get_open_issues_for_target(target_id)
+                if not target_open_issues and target_id == "target_scanner":
+                    target_open_issues = [iss for iss in open_issues if "scanner" in iss.symptom_description.lower()]
                 
                 if len(target_open_issues) == 1:
                     # Exactly one open issue on this named target -> EXPLICIT link
@@ -271,9 +275,16 @@ class IssueLinker:
 
                 else:
                     # Target named, but no open issue for this target
-                    # (e.g. unrelated device or newly mentioned healthy device)
-                    linked_event.issue_id = None
-                    linked_event.link_confidence = LinkConfidence.NONE
+                    # If utterance contains global phrase and there's a unique open issue across call, link it
+                    has_global_phrase = any(g in lower for g in GLOBAL_RESOLUTION_CUES)
+                    if has_global_phrase and len(open_issues) == 1:
+                        chosen_issue = open_issues[0]
+                        chosen_issue.event_history_ids.append(linked_event.event_id)
+                        linked_event.issue_id = chosen_issue.issue_id
+                        linked_event.link_confidence = LinkConfidence.INFERRED_UNIQUE
+                    else:
+                        linked_event.issue_id = None
+                        linked_event.link_confidence = LinkConfidence.NONE
 
                 self.linked_events.append(linked_event)
                 return linked_event
@@ -341,6 +352,29 @@ class IssueLinker:
                     linked_event.link_confidence = LinkConfidence.EXPLICIT
                 else:
                     linked_event.link_confidence = LinkConfidence.AMBIGUOUS
+        else:
+            # No specific target given in action clause
+            open_issues = self._get_open_issues()
+            if len(open_issues) == 1:
+                chosen_issue = open_issues[0]
+                chosen_issue.event_history_ids.append(linked_event.event_id)
+                linked_event.issue_id = chosen_issue.issue_id
+                linked_event.link_confidence = LinkConfidence.INFERRED_UNIQUE
+            elif linked_event.claim_type == ClaimType.REMEDIAL_ACTION and len(self.issues) == 0:
+                # Consultant or client performs a remedial action without prior explicit failure statement
+                new_issue_id = self._generate_issue_id(target_id, symptom_cat)
+                init_state = IssueState.RESOLVED_UNCONFIRMED if linked_event.speaker == ActorRole.CONSULTANT else IssueState.OPEN
+                new_issue = OperationalIssue(
+                    issue_id=new_issue_id,
+                    target_id=target_id,
+                    category=symptom_cat,
+                    symptom_description=text.strip(),
+                    current_state=init_state,
+                    event_history_ids=[linked_event.event_id]
+                )
+                self.issues[new_issue_id] = new_issue
+                linked_event.issue_id = new_issue_id
+                linked_event.link_confidence = LinkConfidence.EXPLICIT
 
         self.linked_events.append(linked_event)
         return linked_event

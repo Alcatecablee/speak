@@ -33,9 +33,21 @@ class TranscriptionPipeline:
         Process both audio streams, merge them, and output transcripts.
         """
         session_start_time = datetime.now()
-        call_start = call_start_time or session_start_time
+        call_start = None
+        if call_start_time:
+            if isinstance(call_start_time, str):
+                try:
+                    call_start = datetime.fromisoformat(call_start_time)
+                except Exception:
+                    call_start = None
+            elif isinstance(call_start_time, datetime):
+                call_start = call_start_time
+
         logger.info(f"=== [TRANSCRIPTION PIPELINE START] ===")
-        logger.info(f"Call start timestamp: {call_start.strftime('%Y-%m-%d %H:%M:%S')}")
+        if call_start:
+            logger.info(f"Call start timestamp: {call_start.strftime('%Y-%m-%d %H:%M:%S')}")
+        else:
+            logger.info("Call start timestamp: None (using recording-relative chronology)")
         logger.info(f"Consultant Stream: {consultant_audio_path}")
         logger.info(f"Client Stream:     {client_audio_path}")
         
@@ -89,7 +101,8 @@ class TranscriptionPipeline:
             
         result = {
             "status": status,
-            "call_start_time": call_start.isoformat(),
+            "call_start_time": call_start.isoformat() if call_start else None,
+            "timestamp_anchor": "RECORDING_STARTED_AT_WALL_CLOCK" if call_start else "RECORDING_RELATIVE_OFFSET",
             "consultant_segments_count": len(consultant_segments),
             "client_segments_count": len(client_segments),
             "total_dialogue_turns": len(merged_turns),

@@ -109,6 +109,26 @@ def _normalize_id_digits(raw: str) -> str:
     return raw.strip()
 
 
+def _is_affirmative_current_connection(text: str, speaker: ActorRole) -> bool:
+    """Verifies that the turn contains an affirmative, current consultant connection."""
+    if speaker != ActorRole.CONSULTANT:
+        return False
+    lower = text.lower()
+    # Must contain connection predicate
+    if not any(k in lower for k in ["connected", "logged in", "dialed in"]):
+        return False
+    # Must NOT contain negation
+    if any(re.search(r"\b" + nw + r"\b", lower) for nw in ["not", "never", "cannot", "can't", "no", "didn't", "failed to", "disconnected"]):
+        return False
+    # Must NOT be retrospective past ("was connected earlier", "previously connected")
+    if any(re.search(r"\b" + pw + r"\b", lower) for pw in ["earlier", "was connected", "were connected", "previously", "yesterday", "before"]):
+        return False
+    # Must NOT be prospective future ("will connect", "going to connect", "let me connect")
+    if any(re.search(r"\b" + fw + r"\b", lower) for fw in ["will connect", "going to connect", "let me connect", "about to connect", "can connect"]):
+        return False
+    return True
+
+
 class RemoteIdResolver:
     """Stateful extractor evaluating and resolving connection ID candidates."""
 
@@ -254,6 +274,14 @@ class RemoteIdResolver:
 
         matches = list(num_pattern.finditer(text))
         if not matches:
+            if speaker == ActorRole.CONSULTANT and _is_affirmative_current_connection(text, speaker):
+                active_cands = [c for c in self.candidates if c.status == RemoteIdStatus.ACTIVE]
+                if len(active_cands) == 1:
+                    active_cands[0].consultant_connected = True
+            elif speaker == ActorRole.CONSULTANT and any(re.search(r"\b" + nw + r"\b", lower) for nw in ["not connected", "disconnected", "cannot connect", "can't connect"]):
+                for c in self.candidates:
+                    if c.status == RemoteIdStatus.ACTIVE:
+                        c.consultant_connected = False
             return
 
         anchor = self._detect_anchor(text)
@@ -293,8 +321,10 @@ class RemoteIdResolver:
 
             if existing_cand:
                 # Repeated mention of same ID
-                if speaker == ActorRole.CONSULTANT and "connected" in lower:
+                if _is_affirmative_current_connection(text, speaker):
                     existing_cand.consultant_connected = True
+                elif speaker == ActorRole.CONSULTANT and any(re.search(r"\b" + nw + r"\b", lower) for nw in ["not connected", "disconnected", "cannot connect", "can't connect"]):
+                    existing_cand.consultant_connected = False
                 continue
 
             # Create new candidate
@@ -311,7 +341,7 @@ class RemoteIdResolver:
                 site_label=site_label,
                 target_id=target_id,
                 status=RemoteIdStatus.ACTIVE,
-                consultant_connected=(speaker == ActorRole.CONSULTANT and "connected" in lower)
+                consultant_connected=_is_affirmative_current_connection(text, speaker)
             )
 
             # Gate 5: Verbal Correction Supersession

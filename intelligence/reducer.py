@@ -183,8 +183,23 @@ class PerIssueReducer:
                 if "RETROSPECTIVE_RESOLUTION_CLAIM" not in self.outcome_reasons:
                     self.outcome_reasons.append("RETROSPECTIVE_RESOLUTION_CLAIM")
             elif ev.temporal_scope == TemporalScope.PRESENT_OR_CURRENT:
-                # Confirmed current resolution
-                issue.current_state = IssueState.RESOLVED
+                if ev.speaker == ActorRole.CLIENT:
+                    # Verified customer confirmation of fix
+                    issue.current_state = IssueState.RESOLVED
+                elif ev.speaker == ActorRole.CONSULTANT:
+                    # Consultant claim unconfirmed by customer -> closure-blocked unconfirmed state
+                    issue.current_state = IssueState.RESOLVED_UNCONFIRMED
+                    if "CONSULTANT_CLAIM_UNCONFIRMED_BY_CLIENT" not in self.outcome_reasons:
+                        self.outcome_reasons.append("CONSULTANT_CLAIM_UNCONFIRMED_BY_CLIENT")
+                else:
+                    issue.current_state = IssueState.RESOLVED_UNCONFIRMED
+
+        # Rule B2: Remedial Action by Consultant (Fix Applied but Unverified by Client)
+        elif ev.claim_type == ClaimType.REMEDIAL_ACTION and ev.speaker == ActorRole.CONSULTANT:
+            if issue.current_state == IssueState.OPEN:
+                issue.current_state = IssueState.RESOLVED_UNCONFIRMED
+                if "CONSULTANT_CLAIM_UNCONFIRMED_BY_CLIENT" not in self.outcome_reasons:
+                    self.outcome_reasons.append("CONSULTANT_CLAIM_UNCONFIRMED_BY_CLIENT")
 
         # Rule C: Escalation Dispatch
         elif ev.claim_type == ClaimType.ESCALATION_DISPATCH:
@@ -241,6 +256,7 @@ class PerIssueReducer:
             return ResolutionStatus.UNKNOWN
 
         resolved_count = 0
+        resolved_unconfirmed_count = 0
         open_count = 0
         unresolved_confirmed_count = 0
         review_count = 0
@@ -251,6 +267,11 @@ class PerIssueReducer:
 
             if issue.current_state == IssueState.RESOLVED:
                 resolved_count += 1
+            elif issue.current_state == IssueState.RESOLVED_UNCONFIRMED:
+                resolved_unconfirmed_count += 1
+                self.closure_blockers.append(
+                    f"Issue '{symptom_label}' on {target_label} is RESOLVED_UNCONFIRMED (consultant claimed resolution but customer confirmation not received in recording)"
+                )
             elif issue.current_state == IssueState.OPEN:
                 open_count += 1
                 self.closure_blockers.append(
@@ -268,20 +289,21 @@ class PerIssueReducer:
                 )
 
         # Outcome reasons for incomplete issues
-        if open_count > 0:
-            self.outcome_reasons.append("NO_CONFIRMATION_OF_FIX")
+        if open_count > 0 or resolved_unconfirmed_count > 0:
+            if "NO_CONFIRMATION_OF_FIX" not in self.outcome_reasons:
+                self.outcome_reasons.append("NO_CONFIRMATION_OF_FIX")
 
         # Canonical Status Matrix
-        if review_count > 0 and resolved_count == 0 and open_count == 0 and unresolved_confirmed_count == 0:
+        if review_count > 0 and resolved_count == 0 and open_count == 0 and unresolved_confirmed_count == 0 and resolved_unconfirmed_count == 0:
             return ResolutionStatus.UNKNOWN
 
         if resolved_count == total_issues and review_count == 0:
             return ResolutionStatus.RESOLVED
 
-        if resolved_count > 0 and (open_count > 0 or unresolved_confirmed_count > 0 or review_count > 0):
+        if resolved_count > 0 and (open_count > 0 or unresolved_confirmed_count > 0 or resolved_unconfirmed_count > 0 or review_count > 0):
             return ResolutionStatus.PARTIALLY_RESOLVED
 
-        if resolved_count == 0 and (open_count > 0 or unresolved_confirmed_count > 0):
+        if resolved_count == 0 and (open_count > 0 or unresolved_confirmed_count > 0 or resolved_unconfirmed_count > 0):
             return ResolutionStatus.UNRESOLVED
 
         return ResolutionStatus.PARTIALLY_RESOLVED if resolved_count > 0 else ResolutionStatus.UNKNOWN

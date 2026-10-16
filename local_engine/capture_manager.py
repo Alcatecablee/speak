@@ -541,8 +541,8 @@ class SessionManager:
                 "status": "recording",
                 "stage": "recording",
                 "stage_label": "Recording call",
-                "created_at": datetime.now().isoformat(),
-                "recording_started_at": datetime.now().isoformat(),
+                "created_at": datetime.now().astimezone().isoformat(),
+                "recording_started_at": datetime.now().astimezone().isoformat(),
                 "recording_stopped_at": None,
                 "processing_started_at": None,
                 "completed_at": None,
@@ -831,11 +831,20 @@ class SessionManager:
             atomic_write_json(session_dir / "session_metadata.json", meta)
 
             logger.info(f"[{session_id}] Running Whisper transcription on CPU...")
+            call_start_str = meta.get("recording_started_at")
+            call_start_dt = None
+            if call_start_str:
+                try:
+                    call_start_dt = datetime.fromisoformat(call_start_str)
+                except Exception:
+                    call_start_dt = None
+
             pipeline = TranscriptionPipeline(model_name=self.whisper_model)
             pipeline.process_session(
                 consultant_audio_path=str(mic_path),
                 client_audio_path=str(loop_path),
-                output_dir=str(session_dir)
+                output_dir=str(session_dir),
+                call_start_time=call_start_dt
             )
 
         # Stage 2: AI Conversation Intelligence

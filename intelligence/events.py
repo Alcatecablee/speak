@@ -42,13 +42,15 @@ FAILURE_LEXICON = [
     "crashing", "crashes", "crashed", "corrupt", "damaged", "unreachable",
     "dead", "died", "error", "errors", "socket error", "stopped working",
     "stopped printing", "not responding", "no response", "refused", "blank screen",
+    "freezing", "frozen", "freeze", "freezes",
     "problem", "problems", "down", "trouble", "issue", "issues"
 ]
 
 RESOLUTION_LEXICON = [
-    "work", "working", "works", "worked", "fixed", "sorted", "online", "printing",
-    "operational", "resolved", "reconnected", "cleared", "back up", "good now",
-    "all sorted", "working fine", "printing fine", "connected fine"
+    "working", "works", "worked", "fixed", "sorted", "online", "printing",
+    "operational", "resolved", "cleared", "back up", "good now",
+    "all sorted", "working fine", "printing fine", "connected fine", "solved",
+    "that should fix it", "should fix it", "should fix"
 ]
 
 DIAGNOSTIC_LEXICON = [
@@ -60,7 +62,7 @@ REMEDIAL_LEXICON = [
     "rebooted", "reboot", "rebooting", "restarted", "restart", "restarting",
     "shut down", "shutting down", "power down",
     "cleared spooler", "reseated", "re-cabled", "swapped", "power cycled",
-    "reinstalled", "reset"
+    "reinstalled", "reset", "reconnected", "reconnect", "reconnecting"
 ]
 
 COMMITMENT_LEXICON = [
@@ -74,13 +76,13 @@ CONNECTION_LEXICON = [
 ]
 
 PAST_TEMPORAL_CUES = [
-    "earlier", "was working", "were working", "previously", "before",
-    "initially", "at first", "yesterday", "last week", "prior to"
+    "earlier", "was working", "were working", "was connected", "were connected",
+    "previously", "before", "initially", "at first", "yesterday", "last week", "prior to"
 ]
 
 FUTURE_TEMPORAL_CUES = [
-    "tomorrow", "later", "will", "going to", "sometime next week",
-    "next monday", "shortly", "in 15 minutes"
+    "tomorrow", "later", "will", "going to", "will connect", "going to connect",
+    "let me connect", "about to connect", "sometime next week", "next monday", "shortly", "in 15 minutes"
 ]
 
 PRESENT_TEMPORAL_CUES = [
@@ -168,8 +170,16 @@ def _extract_target_references(text: str) -> List[Tuple[Optional[str], LinkConfi
     if ("terminal" in lower or "till" in lower or "pos" in lower or "workstation" in lower) and not any(t[0].startswith("target_pos_") or t[0] == "target_terminal" for t in targets):
         targets.append(("target_terminal", LinkConfidence.EXPLICIT))
 
+    # Barcode scanner / Scanner
+    if "scanner" in lower:
+        m_till = re.search(r"\b(?:pos|terminal|till)\s*(\d+)\b", lower)
+        if m_till:
+            targets.append((f"target_pos_{m_till.group(1)}", LinkConfidence.EXPLICIT))
+        else:
+            targets.append(("target_scanner", LinkConfidence.EXPLICIT))
+
     # Network
-    if "switch" in lower or "router" in lower or "lan" in lower or "network" in lower:
+    if "switch" in lower or "router" in lower or re.search(r"\b(?:lan|network)\b(?!\s+(?:cable|lead|wire|cord))\b", lower):
         targets.append(("target_network", LinkConfidence.EXPLICIT))
 
     # De-duplicate while preserving order
@@ -253,7 +263,12 @@ def extract_events_from_clause(
     # Connection Established
     elif any(re.search(r"\b" + c + r"\b", lower) for c in CONNECTION_LEXICON):
         claim_type = ClaimType.CONNECTION_ESTABLISHED
-        polarity = Polarity.AFFIRMATIVE
+        if has_negator or any(re.search(r"\b" + nw + r"\b", lower) for nw in ["not", "never", "cannot", "can't", "no", "didn't", "failed to"]):
+            polarity = Polarity.NEGATED
+        elif is_uncertain:
+            polarity = Polarity.UNCERTAIN
+        else:
+            polarity = Polarity.AFFIRMATIVE
 
     # Commitments
     elif any(re.search(r"\b" + c + r"\b", lower) for c in COMMITMENT_LEXICON):
@@ -261,7 +276,7 @@ def extract_events_from_clause(
         polarity = Polarity.AFFIRMATIVE
 
     # Failure Predicates: "failed", "broken", "offline", "jammed", "socket error", "problem"
-    elif any(re.search(r"\b" + f + r"\b", lower) and not (f == "down" and ("shut down" in lower or "power down" in lower)) for f in FAILURE_LEXICON):
+    elif any(re.search(r"\b" + f + r"\b", lower) and not (f == "down" and ("shut down" in lower or "power down" in lower)) and not (f in ["problem", "problems", "issue", "issues"] and any(rp in lower for rp in ["solved", "fixed", "resolved", "sorted"])) for f in FAILURE_LEXICON):
         claim_type = ClaimType.FAILURE_ASSERTION
         if is_uncertain:
             polarity = Polarity.UNCERTAIN
@@ -273,14 +288,15 @@ def extract_events_from_clause(
             polarity = Polarity.AFFIRMATIVE
 
     # Resolution Predicates: "working", "works", "fixed", "sorted", "online"
-    elif any(re.search(r"\b" + r + r"\b", lower) for r in RESOLUTION_LEXICON):
+    # Procedural phrases ("work on", "working on") are excluded from resolution assertions
+    elif any(re.search(r"\b" + r + r"\b", lower) for r in RESOLUTION_LEXICON) and not re.search(r"\b(?:work|working)\s+on\b", lower):
         claim_type = ClaimType.RESOLUTION_ASSERTION
         if is_uncertain:
             polarity = Polarity.UNCERTAIN
         elif is_correlative_not_only:
             # "Not only does the terminal work" -> strictly AFFIRMATIVE resolution!
             polarity = Polarity.AFFIRMATIVE
-        elif has_negator:
+        elif re.search(r"\b(?:not|didn't|did not|never|doesn't|does not|won't|cannot|can't|nothing\s+is|neither)\s+(?:\w+\s+){0,2}(?:working|works|worked|work|fixed|sorted|online|printing|operational|resolved|cleared|solved)\b", lower) or re.search(r"\b(?:is|are|was|were)\s+(?:not|never)\b", lower):
             # "is not working", "does not work" -> Negated resolution assertion
             polarity = Polarity.NEGATED
         else:
