@@ -169,18 +169,46 @@ class IssueLinker:
     ) -> Optional[OperationalIssue]:
         """Finds an existing open issue matching both target and problem category."""
         for issue in self.issues.values():
-            if issue.target_id == target_id:
+            target_match = (issue.target_id == target_id) or (target_id == "target_printer" and bool(issue.target_id and "printer" in issue.target_id))
+            if target_match and issue.current_state in (
+                IssueState.OPEN,
+                IssueState.REMEDIAL_ACTION_TAKEN_UNVERIFIED,
+                IssueState.RESOLVED_UNCONFIRMED,
+            ):
                 if issue.category == category or category == ProblemCategory.GENERAL_SUPPORT:
                     return issue
         return None
 
     def _get_open_issues(self) -> List[OperationalIssue]:
-        """Returns all issues currently in OPEN state."""
-        return [iss for iss in self.issues.values() if iss.current_state == IssueState.OPEN]
+        """Returns all issues currently in non-final states awaiting verification."""
+        return [
+            iss for iss in self.issues.values()
+            if iss.current_state in (
+                IssueState.OPEN,
+                IssueState.REMEDIAL_ACTION_TAKEN_UNVERIFIED,
+                IssueState.RESOLVED_UNCONFIRMED,
+            )
+        ]
 
     def _get_open_issues_for_target(self, target_id: str) -> List[OperationalIssue]:
-        """Returns all open issues bound to a specific target."""
-        return [iss for iss in self.issues.values() if iss.target_id == target_id and iss.current_state == IssueState.OPEN]
+        """Returns all open or unconfirmed issues bound to a specific target."""
+        open_issues = self._get_open_issues()
+        direct_matches = [iss for iss in open_issues if iss.target_id == target_id]
+        if direct_matches:
+            return direct_matches
+        if target_id == "target_printer":
+            printer_matches = [iss for iss in open_issues if iss.target_id and "printer" in iss.target_id]
+            if printer_matches:
+                return printer_matches
+        if target_id == "target_terminal":
+            terminal_matches = [iss for iss in open_issues if iss.target_id and ("pos" in iss.target_id or "terminal" in iss.target_id)]
+            if terminal_matches:
+                return terminal_matches
+        if target_id == "target_scanner":
+            scanner_matches = [iss for iss in open_issues if (iss.target_id and "scanner" in iss.target_id) or ("scanner" in iss.symptom_description.lower())]
+            if scanner_matches:
+                return scanner_matches
+        return []
 
     def process_event(self, event: EvidenceEvent) -> EvidenceEvent:
         """
@@ -363,7 +391,7 @@ class IssueLinker:
             elif linked_event.claim_type == ClaimType.REMEDIAL_ACTION and len(self.issues) == 0:
                 # Consultant or client performs a remedial action without prior explicit failure statement
                 new_issue_id = self._generate_issue_id(target_id, symptom_cat)
-                init_state = IssueState.RESOLVED_UNCONFIRMED if linked_event.speaker == ActorRole.CONSULTANT else IssueState.OPEN
+                init_state = IssueState.REMEDIAL_ACTION_TAKEN_UNVERIFIED if linked_event.speaker == ActorRole.CONSULTANT else IssueState.OPEN
                 new_issue = OperationalIssue(
                     issue_id=new_issue_id,
                     target_id=target_id,

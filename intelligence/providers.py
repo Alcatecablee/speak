@@ -15,9 +15,12 @@ from intelligence.models import (
     ActionType,
     ActionsTaken,
     ActorRole,
+    ClaimType,
     ClientIssue,
     ConfidenceAssessment,
     ConfidenceLevel,
+    Polarity,
+    TemporalScope,
     ConversationAnalysis,
     ConversationSummary,
     EpistemicType,
@@ -392,7 +395,16 @@ class GroundedExtractionProvider(BaseAnalysisProvider):
 
             # B. Consultant Actions & Commitments
             if speaker == "CONSULTANT":
-                if "connected" in lower or "connecting" in lower or "logged in" in lower:
+                has_affirmative_conn = (
+                    any(
+                        ev.turn_index == idx and ev.claim_type == ClaimType.CONNECTION_ESTABLISHED and ev.polarity == Polarity.AFFIRMATIVE and ev.temporal_scope == TemporalScope.PRESENT_OR_CURRENT
+                        for ev in all_events
+                    )
+                    or any(
+                        c.consultant_connected for c in remote_res.candidates if getattr(c, "turn_index", None) == idx
+                    )
+                )
+                if has_affirmative_conn:
                     conn_id = customer_ids[0] if customer_ids else "remote workstation"
                     consultant_actions_summary.append(f"Connected remotely to client workstation (ID: {conn_id}).")
                     structured_actions.append(StructuredAction(
@@ -559,7 +571,7 @@ class GroundedExtractionProvider(BaseAnalysisProvider):
         elif reduction_res.review_required and any(
             r in ("GLOBAL_RESOLUTION_AMBIGUITY", "AMBIGUOUS_GLOBAL_RESOLUTION") or "GLOBAL" in str(r)
             for r in reduction_res.review_reasons
-        ):
+        ) and reduction_res.technical_resolution_status not in (ResolutionStatus.PARTIALLY_RESOLVED, ResolutionStatus.RESOLVED):
             resolution_status = ResolutionStatus.UNKNOWN
             resolution_rationale = "Ambiguous resolution claim with multiple open issues requires human review."
             outcome = "Interaction concluded with ambiguous resolution claim."

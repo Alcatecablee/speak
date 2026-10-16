@@ -196,10 +196,10 @@ class PerIssueReducer:
 
         # Rule B2: Remedial Action by Consultant (Fix Applied but Unverified by Client)
         elif ev.claim_type == ClaimType.REMEDIAL_ACTION and ev.speaker == ActorRole.CONSULTANT:
-            if issue.current_state == IssueState.OPEN:
-                issue.current_state = IssueState.RESOLVED_UNCONFIRMED
-                if "CONSULTANT_CLAIM_UNCONFIRMED_BY_CLIENT" not in self.outcome_reasons:
-                    self.outcome_reasons.append("CONSULTANT_CLAIM_UNCONFIRMED_BY_CLIENT")
+            if issue.current_state in (IssueState.OPEN, IssueState.REMEDIAL_ACTION_TAKEN_UNVERIFIED):
+                issue.current_state = IssueState.REMEDIAL_ACTION_TAKEN_UNVERIFIED
+                if "CONSULTANT_REMEDIAL_ACTION_UNVERIFIED" not in self.outcome_reasons:
+                    self.outcome_reasons.append("CONSULTANT_REMEDIAL_ACTION_UNVERIFIED")
 
         # Rule C: Escalation Dispatch
         elif ev.claim_type == ClaimType.ESCALATION_DISPATCH:
@@ -257,6 +257,7 @@ class PerIssueReducer:
 
         resolved_count = 0
         resolved_unconfirmed_count = 0
+        remedial_unverified_count = 0
         open_count = 0
         unresolved_confirmed_count = 0
         review_count = 0
@@ -271,6 +272,11 @@ class PerIssueReducer:
                 resolved_unconfirmed_count += 1
                 self.closure_blockers.append(
                     f"Issue '{symptom_label}' on {target_label} is RESOLVED_UNCONFIRMED (consultant claimed resolution but customer confirmation not received in recording)"
+                )
+            elif issue.current_state == IssueState.REMEDIAL_ACTION_TAKEN_UNVERIFIED:
+                remedial_unverified_count += 1
+                self.closure_blockers.append(
+                    f"Issue '{symptom_label}' on {target_label} is REMEDIAL_ACTION_TAKEN_UNVERIFIED (remedial action taken by consultant but outcome unverified by customer)"
                 )
             elif issue.current_state == IssueState.OPEN:
                 open_count += 1
@@ -289,21 +295,22 @@ class PerIssueReducer:
                 )
 
         # Outcome reasons for incomplete issues
-        if open_count > 0 or resolved_unconfirmed_count > 0:
+        incomplete_count = open_count + unresolved_confirmed_count + resolved_unconfirmed_count + remedial_unverified_count
+        if incomplete_count > 0:
             if "NO_CONFIRMATION_OF_FIX" not in self.outcome_reasons:
                 self.outcome_reasons.append("NO_CONFIRMATION_OF_FIX")
 
         # Canonical Status Matrix
-        if review_count > 0 and resolved_count == 0 and open_count == 0 and unresolved_confirmed_count == 0 and resolved_unconfirmed_count == 0:
+        if review_count > 0 and resolved_count == 0 and incomplete_count == 0:
             return ResolutionStatus.UNKNOWN
 
         if resolved_count == total_issues and review_count == 0:
             return ResolutionStatus.RESOLVED
 
-        if resolved_count > 0 and (open_count > 0 or unresolved_confirmed_count > 0 or resolved_unconfirmed_count > 0 or review_count > 0):
+        if resolved_count > 0 and (incomplete_count > 0 or review_count > 0):
             return ResolutionStatus.PARTIALLY_RESOLVED
 
-        if resolved_count == 0 and (open_count > 0 or unresolved_confirmed_count > 0 or resolved_unconfirmed_count > 0):
+        if resolved_count == 0 and incomplete_count > 0:
             return ResolutionStatus.UNRESOLVED
 
         return ResolutionStatus.PARTIALLY_RESOLVED if resolved_count > 0 else ResolutionStatus.UNKNOWN

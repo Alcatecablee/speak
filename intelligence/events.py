@@ -50,7 +50,7 @@ RESOLUTION_LEXICON = [
     "working", "works", "worked", "fixed", "sorted", "online", "printing",
     "operational", "resolved", "cleared", "back up", "good now",
     "all sorted", "working fine", "printing fine", "connected fine", "solved",
-    "that should fix it", "should fix it", "should fix"
+    "that should fix it", "should fix it", "should fix", "work"
 ]
 
 DIAGNOSTIC_LEXICON = [
@@ -288,8 +288,10 @@ def extract_events_from_clause(
             polarity = Polarity.AFFIRMATIVE
 
     # Resolution Predicates: "working", "works", "fixed", "sorted", "online"
-    # Procedural phrases ("work on", "working on") are excluded from resolution assertions
-    elif any(re.search(r"\b" + r + r"\b", lower) for r in RESOLUTION_LEXICON) and not re.search(r"\b(?:work|working)\s+on\b", lower):
+    # Procedural phrases ("work on", "working on", "let's work", etc.) are excluded from resolution assertions
+    elif any(re.search(r"\b" + r + r"\b", lower) for r in RESOLUTION_LEXICON) and \
+         not re.search(r"\b(?:work|working)\s+on\b", lower) and \
+         not re.search(r"\b(?:let's|lets|let us|going to|will|about to|can|try to|want to|get to)\s+work\b", lower):
         claim_type = ClaimType.RESOLUTION_ASSERTION
         if is_uncertain:
             polarity = Polarity.UNCERTAIN
