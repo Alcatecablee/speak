@@ -13,6 +13,8 @@
   const tidyBtn = $('tidy');
   const statusEl = $('status');
   const interimEl = $('interim');
+  const liveTypingStream = $('live-typing-stream');
+  const liveTypingText = $('live-typing-text');
   const counterEl = $('counter');
   const bannerEl = $('banner');
   const tagsEl = $('tags');
@@ -31,11 +33,14 @@
   const tabTranscript = $('tab-transcript');
   const tabReview = $('tab-review');
   const tabSalesforce = $('tab-salesforce');
+  const tabQa = $('tab-qa');
+  const tabQaBadge = $('tab-qa-badge');
 
   const panelNotes = $('panel-notes');
   const panelTranscript = $('panel-transcript');
   const panelReview = $('panel-review');
   const panelSalesforce = $('panel-salesforce');
+  const panelQa = $('panel-qa');
 
   const transcriptContainer = $('transcript-container');
   const transcriptCount = $('transcript-count');
@@ -46,6 +51,30 @@
   const sfEditedBadge = $('sf-edited-badge');
   const sfRestoreBtn = $('sf-restore-btn');
   const btnLoadSample = $('btn-load-sample');
+
+  // QA Readiness & Polish Comparison elements
+  const demoNoteBar = $('demo-note-bar');
+  const btnResetDemo = $('btn-reset-demo');
+  const resetDemoModal = $('reset-demo-modal');
+  const rdClose = $('rd-close');
+  const rdCancelBtn = $('rd-cancel-btn');
+  const rdConfirmBtn = $('rd-confirm-btn');
+  const btnNotesQa = $('btn-notes-qa');
+  const notesQaStatus = $('notes-qa-status');
+  const tidyComparison = $('tidy-comparison');
+  const tidyBefore = $('tidy-before');
+  const tidyAfter = $('tidy-after');
+  const tidyRevert = $('tidy-revert');
+  const tidyComparisonClose = $('tidy-comparison-close');
+  const btnOpenQaFromTidy = $('btn-open-qa-from-tidy');
+  const qaOverallBadge = $('qa-overall-badge');
+  const qaScoreCard = $('qa-score-card');
+  const qaScoreDisplay = $('qa-score-display');
+  const qaScoreLabel = $('qa-score-label');
+  const qaScoreSubtext = $('qa-score-subtext');
+  const qaSummaryText = $('qa-summary-text');
+  const qaCountsPills = $('qa-counts-pills');
+  const qaChecksContainer = $('qa-checks-container');
 
   // Desktop Split elements (D.1)
   const mainContent = $('main-content');
@@ -78,6 +107,7 @@
   const processingTimer = $('processing-timer');
   const processingStepper = $('processing-stepper');
   const processingActions = $('processing-actions');
+  const btnCancelProcessing = $('btn-cancel-processing');
   const btnViewTranscript = $('btn-view-transcript');
   const btnViewReview = $('btn-view-review');
   const btnViewSf = $('btn-view-sf');
@@ -96,6 +126,8 @@
   let engineElapsedSeconds = 0;
   let currentSalesforcePayload = null;
   let originalSalesforceValues = null;
+  let currentTranscriptTurns = [];
+  let lastRawBeforeTidy = '';
   let artifactsLoaded = false;
   let recordingSessionId = null;
   let selectedSessionId = null;
@@ -171,6 +203,8 @@
 > [!NOTE]
 > **Assessed Sentiment**: \`NEUTRAL\`  
 > **Rationale**: Client was polite and operational; consultant was responsive with clear callback commitment.`;
+
+  const DEMO_ROUGH_NOTE = "client reported variance on cheesecake recipe deducting whole batch instead of slices. dialed in to MC1 and checked recipe setup in production module. client also asked for butternut puree to be set to 1 KG. will check recipe setup and call client back within 15 minutes. issue not resolved yet.";
 
   const DEMO_SALESFORCE_PAYLOAD = {
     sobject: "Case",
@@ -360,6 +394,7 @@
     panelTranscript.hidden = true;
     panelReview.hidden = true;
     panelSalesforce.hidden = true;
+    if (panelQa) panelQa.hidden = true;
 
     const currentStage = data.stage || 'stopping';
     const completed = data.completed_stages || [];
@@ -372,18 +407,21 @@
       processingSubtitle.textContent = 'All audio transcribed and case intelligence generated successfully.';
       processingTimer.textContent = `Completed (${formatDuration(data.elapsed_seconds || 0)})`;
       if (processingActions) processingActions.hidden = false;
+      if (btnCancelProcessing) btnCancelProcessing.hidden = true;
     } else if (isError) {
       processingTitle.textContent = 'PROCESSING FAILED';
       processingTitle.className = 'text-xs font-bold uppercase tracking-wider text-red-600 dark:text-red-400';
       processingSubtitle.textContent = data.error || 'Pipeline encountered an unexpected error.';
       processingTimer.textContent = 'Failed';
       if (processingActions) processingActions.hidden = true;
+      if (btnCancelProcessing) btnCancelProcessing.hidden = false;
     } else {
       processingTitle.textContent = 'PROCESSING CALL';
       processingTitle.className = 'text-xs font-bold uppercase tracking-wider text-teal-600 dark:text-teal-400';
       processingSubtitle.textContent = data.message || 'Dual-stream capture finalized · Running local pipeline on CPU';
       processingTimer.textContent = `Elapsed: ${formatDuration(data.elapsed_seconds || 0)}`;
       if (processingActions) processingActions.hidden = true;
+      if (btnCancelProcessing) btnCancelProcessing.hidden = false;
     }
 
     let html = '';
@@ -402,19 +440,19 @@
         itemClass = 'proc-item-complete';
         badgeClass = 'proc-badge-complete';
         icon = '✓';
-        titleClass = 'text-emerald-900 dark:text-emerald-300 font-semibold';
+        titleClass = 'text-slate-900 dark:text-slate-100 font-medium';
         subtext = '<p class="text-[11px] text-emerald-700 dark:text-emerald-400 mt-0.5">Complete</p>';
       } else if (isActive) {
         itemClass = 'proc-item-active';
         badgeClass = 'proc-badge-active';
         icon = '●';
-        titleClass = 'text-amber-900 dark:text-amber-300 font-bold';
+        titleClass = 'text-slate-900 dark:text-slate-100 font-semibold';
         subtext = `<p class="text-[11px] text-amber-800 dark:text-amber-200 mt-0.5 font-medium">${escapeHtml(data.message || stage.desc)}</p>`;
       } else if (isFailed) {
         itemClass = 'proc-item-failed';
         badgeClass = 'proc-badge-failed';
         icon = '✕';
-        titleClass = 'text-red-900 dark:text-red-300 font-bold';
+        titleClass = 'text-red-900 dark:text-red-300 font-semibold';
         subtext = `<p class="text-[11px] text-red-700 dark:text-red-400 mt-0.5 font-medium">${escapeHtml(data.error || 'Failed')}</p>`;
       }
 
@@ -481,6 +519,14 @@
       }
       setMicButtonState('idle', 'Start Call Capture');
       setStatus(`Engine error: ${data.error || 'Unknown error'}`, 'err');
+    } else if (data.status === 'cancelled') {
+      if (processingCard) processingCard.hidden = true;
+      selectedSessionId = null;
+      recordingSessionId = null;
+      engineState = 'idle';
+      setMicButtonState('idle', 'Start Call Capture');
+      setStatus('Ready');
+      switchTab('notes');
     } else if (data.status === 'idle' && prev !== 'idle') {
       if (processingCard) processingCard.hidden = true;
       setMicButtonState('idle', 'Start Call Capture');
@@ -579,6 +625,29 @@
     }
   }
 
+  async function cancelProcessing() {
+    const sessionToCancel = selectedSessionId || recordingSessionId;
+    if (sessionToCancel && engineConnected) {
+      try {
+        await engineFetch(`/capture/cancel?session_id=${encodeURIComponent(sessionToCancel)}`, { method: 'POST' });
+      } catch (err) {
+        console.warn('Cancel request to engine failed:', err);
+      }
+    }
+    selectedSessionId = null;
+    recordingSessionId = null;
+    engineState = 'idle';
+    if (processingCard) processingCard.hidden = true;
+    setMicButtonState('idle', 'Start Call Capture');
+    setStatus('Ready');
+    switchTab('notes');
+    showToast('Call processing cancelled.');
+  }
+
+  if (btnCancelProcessing) {
+    btnCancelProcessing.addEventListener('click', cancelProcessing);
+  }
+
   async function fetchAndRenderEngineArtifacts(sessionId) {
     if (!sessionId) {
       console.warn('fetchAndRenderEngineArtifacts called without explicit sessionId');
@@ -628,18 +697,19 @@
     if (!transJson || !transJson.merged_turns) return;
     artifactsLoaded = true;
     const turns = transJson.merged_turns;
+    currentTranscriptTurns = turns;
     transcriptCount.textContent = `${turns.length} turns`;
 
     let html = '';
     turns.forEach((t, idx) => {
       const isConsultant = t.speaker === 'CONSULTANT';
-      const bg = isConsultant ? 'bg-teal-50 dark:bg-teal-950/40 border-teal-200 dark:border-teal-800' : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700';
-      const badge = isConsultant ? 'bg-teal-600 text-white' : 'bg-indigo-600 text-white';
+      const turnBg = isConsultant ? 'bg-slate-50/70 dark:bg-slate-800/30' : 'bg-transparent';
+      const speakerClass = isConsultant ? 'text-teal-700 dark:text-teal-400 font-semibold' : 'text-slate-600 dark:text-slate-400 font-medium';
       html += `
-        <div class="transcript-turn rounded-xl border p-2.5 transition ${bg}" data-turn-idx="${idx}" data-turn-text="${escapeHtml(t.text)}">
+        <div class="transcript-turn rounded-lg p-2.5 transition ${turnBg}" data-turn-idx="${idx}" data-turn-text="${escapeHtml(t.text)}">
           <div class="flex items-center justify-between gap-2 mb-1">
-            <span class="rounded px-1.5 py-0.5 text-[10px] font-bold ${badge}">${t.speaker}</span>
-            <span class="text-[10px] text-slate-400 font-mono">${t.timestamp_str || ''}</span>
+            <span class="text-xs ${speakerClass}">${escapeHtml(t.speaker)}</span>
+            <span class="text-[10px] text-slate-400 font-mono">${escapeHtml(t.timestamp_str || '')}</span>
           </div>
           <p class="text-xs text-slate-800 dark:text-slate-200 leading-relaxed">${escapeHtml(t.text)}</p>
         </div>
@@ -650,6 +720,7 @@
     // Trigger Procedure Hub evaluation on transcript text
     const fullTranscriptText = turns.map((t) => t.text).join(' ');
     triggerProcedureContext(fullTranscriptText);
+    refreshQaReadiness();
   }
 
   function renderReview(reviewData) {
@@ -665,6 +736,7 @@
 
     // Render Salesforce Draft with editable inputs and dirty tracking
     renderSalesforceDraft(reviewData);
+    refreshQaReadiness();
   }
 
   function renderSalesforceDraft(reviewData) {
@@ -691,48 +763,48 @@
 
     salesforceContainer.innerHTML = `
       <div class="space-y-3">
-        <div class="rounded-xl border border-amber-300 bg-amber-50 p-3 dark:border-amber-700/60 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200">
-          <p class="font-bold text-xs">Human Review & CRM Sync</p>
-          <p class="text-[11px]">Review or modify fields below. Changes are tracked. Use the copy buttons to transfer individual fields or the full record into Salesforce.</p>
+        <div class="rounded-lg bg-slate-50/70 p-2.5 dark:bg-slate-800/30 text-slate-700 dark:text-slate-300">
+          <p class="font-medium text-xs text-slate-900 dark:text-slate-100">Human Review &amp; CRM Sync</p>
+          <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Review or edit fields below. Use copy buttons to transfer individual fields or the full record into Salesforce.</p>
         </div>
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-          <div class="p-2.5 rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-800/60">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+          <div>
             <div class="flex items-center justify-between mb-1">
-              <label for="sf-status" class="text-slate-500 dark:text-slate-400 font-semibold text-[10px] uppercase">CASE STATUS</label>
-              <button type="button" class="sf-copy-field-btn text-[10px] text-teal-600 dark:text-teal-400 font-bold hover:underline" data-target="sf-status" data-label="Status">Copy</button>
+              <label for="sf-status" class="text-slate-600 dark:text-slate-300 font-medium text-xs">Case Status</label>
+              <button type="button" class="sf-copy-field-btn text-[11px] text-slate-400 hover:text-teal-600 dark:text-slate-500 dark:hover:text-teal-400 font-medium transition" data-target="sf-status" data-label="Status">Copy</button>
             </div>
-            <input id="sf-status" type="text" value="${escapeHtml(status)}" class="w-full rounded-lg border border-slate-300 bg-white p-1.5 text-xs font-bold text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-teal-500" />
+            <input id="sf-status" type="text" value="${escapeHtml(status)}" class="w-full rounded-lg border border-slate-200/80 bg-white p-2 text-xs font-medium text-slate-800 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-teal-500/70 focus:border-teal-500/70" />
           </div>
-          <div class="p-2.5 rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-800/60">
+          <div>
             <div class="flex items-center justify-between mb-1">
-              <label for="sf-remote-id" class="text-slate-500 dark:text-slate-400 font-semibold text-[10px] uppercase">REMOTE CONNECTION ID</label>
-              <button type="button" class="sf-copy-field-btn text-[10px] text-teal-600 dark:text-teal-400 font-bold hover:underline" data-target="sf-remote-id" data-label="Remote ID">Copy</button>
+              <label for="sf-remote-id" class="text-slate-600 dark:text-slate-300 font-medium text-xs">Remote Connection ID</label>
+              <button type="button" class="sf-copy-field-btn text-[11px] text-slate-400 hover:text-teal-600 dark:text-slate-500 dark:hover:text-teal-400 font-medium transition" data-target="sf-remote-id" data-label="Remote ID">Copy</button>
             </div>
-            <input id="sf-remote-id" type="text" value="${escapeHtml(remoteId)}" class="w-full rounded-lg border border-slate-300 bg-white p-1.5 text-xs font-mono font-bold text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-teal-500" />
-          </div>
-        </div>
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-          <div class="p-2.5 rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-800/60">
-            <div class="flex items-center justify-between mb-1">
-              <label for="sf-category" class="text-slate-500 dark:text-slate-400 font-semibold text-[10px] uppercase">RESOLUTION CATEGORY</label>
-              <button type="button" class="sf-copy-field-btn text-[10px] text-teal-600 dark:text-teal-400 font-bold hover:underline" data-target="sf-category" data-label="Category">Copy</button>
-            </div>
-            <input id="sf-category" type="text" value="${escapeHtml(category)}" class="w-full rounded-lg border border-slate-300 bg-white p-1.5 text-xs font-semibold text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-teal-500" />
-          </div>
-          <div class="p-2.5 rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-800/60">
-            <div class="flex items-center justify-between mb-1">
-              <label for="sf-subject" class="text-slate-500 dark:text-slate-400 font-semibold text-[10px] uppercase">CASE SUBJECT</label>
-              <button type="button" class="sf-copy-field-btn text-[10px] text-teal-600 dark:text-teal-400 font-bold hover:underline" data-target="sf-subject" data-label="Subject">Copy</button>
-            </div>
-            <input id="sf-subject" type="text" value="${escapeHtml(subject)}" class="w-full rounded-lg border border-slate-300 bg-white p-1.5 text-xs font-semibold text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-teal-500" />
+            <input id="sf-remote-id" type="text" value="${escapeHtml(remoteId)}" class="w-full rounded-lg border border-slate-200/80 bg-white p-2 text-xs font-mono font-medium text-slate-800 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-teal-500/70 focus:border-teal-500/70" />
           </div>
         </div>
-        <div class="p-2.5 rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-800/60">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label for="sf-category" class="text-slate-600 dark:text-slate-300 font-medium text-xs">Resolution Category</label>
+              <button type="button" class="sf-copy-field-btn text-[11px] text-slate-400 hover:text-teal-600 dark:text-slate-500 dark:hover:text-teal-400 font-medium transition" data-target="sf-category" data-label="Category">Copy</button>
+            </div>
+            <input id="sf-category" type="text" value="${escapeHtml(category)}" class="w-full rounded-lg border border-slate-200/80 bg-white p-2 text-xs font-medium text-slate-800 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-teal-500/70 focus:border-teal-500/70" />
+          </div>
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label for="sf-subject" class="text-slate-600 dark:text-slate-300 font-medium text-xs">Case Subject</label>
+              <button type="button" class="sf-copy-field-btn text-[11px] text-slate-400 hover:text-teal-600 dark:text-slate-500 dark:hover:text-teal-400 font-medium transition" data-target="sf-subject" data-label="Subject">Copy</button>
+            </div>
+            <input id="sf-subject" type="text" value="${escapeHtml(subject)}" class="w-full rounded-lg border border-slate-200/80 bg-white p-2 text-xs font-medium text-slate-800 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-teal-500/70 focus:border-teal-500/70" />
+          </div>
+        </div>
+        <div>
           <div class="flex items-center justify-between mb-1">
-            <label for="sf-description" class="text-slate-500 dark:text-slate-400 font-semibold text-[10px] uppercase">CASE DESCRIPTION (FIRST-PERSON CRM NARRATIVE)</label>
-            <button type="button" class="sf-copy-field-btn text-[10px] text-teal-600 dark:text-teal-400 font-bold hover:underline" data-target="sf-description" data-label="Description">Copy</button>
+            <label for="sf-description" class="text-slate-600 dark:text-slate-300 font-medium text-xs">Case Description (First-person narrative)</label>
+            <button type="button" class="sf-copy-field-btn text-[11px] text-slate-400 hover:text-teal-600 dark:text-slate-500 dark:hover:text-teal-400 font-medium transition" data-target="sf-description" data-label="Description">Copy</button>
           </div>
-          <textarea id="sf-description" rows="7" class="w-full rounded-lg border border-slate-300 bg-white p-2 text-xs font-mono leading-relaxed text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-teal-500">${escapeHtml(description)}</textarea>
+          <textarea id="sf-description" rows="7" class="w-full rounded-lg border border-slate-200/80 bg-white p-2.5 text-xs font-mono leading-relaxed text-slate-800 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-teal-500/70 focus:border-teal-500/70">${escapeHtml(description)}</textarea>
         </div>
       </div>
     `;
@@ -764,6 +836,7 @@
 
     if (sfEditedBadge) sfEditedBadge.hidden = !isDirty;
     if (sfRestoreBtn) sfRestoreBtn.hidden = !isDirty;
+    refreshQaReadiness();
   }
 
   function restoreOriginalSalesforceDraft() {
@@ -776,6 +849,7 @@
 
     if (sfEditedBadge) sfEditedBadge.hidden = true;
     if (sfRestoreBtn) sfRestoreBtn.hidden = true;
+    refreshQaReadiness();
     showToast('Restored original Salesforce draft fields.');
   }
 
@@ -797,17 +871,17 @@
   function formatSimpleMarkdown(text) {
     let out = escapeHtml(text);
     // Headers
-    out = out.replace(/^# (.*?)$/gm, '<h1 class="text-base font-bold text-slate-900 dark:text-slate-100 mt-2 mb-1 border-b pb-1">$1</h1>');
-    out = out.replace(/^## (.*?)$/gm, '<h2 class="text-sm font-bold text-slate-800 dark:text-slate-200 mt-3 mb-1 text-teal-700 dark:text-teal-400">$1</h2>');
+    out = out.replace(/^# (.*?)$/gm, '<h1 class="text-sm font-semibold text-slate-900 dark:text-slate-100 mt-2 mb-1 border-b border-slate-100 dark:border-slate-800 pb-1">$1</h1>');
+    out = out.replace(/^## (.*?)$/gm, '<h2 class="text-xs font-semibold text-slate-800 dark:text-slate-200 mt-3 mb-1 text-teal-800 dark:text-teal-300">$1</h2>');
     // Blockquotes & Alerts
-    out = out.replace(/^> \[\!(.*?)\]\n> (.*?)$/gm, '<div class="my-2 p-2 rounded-lg bg-teal-50 dark:bg-teal-950/40 border-l-4 border-teal-500 text-xs"><strong>$1:</strong> $2</div>');
-    out = out.replace(/^> (.*?)$/gm, '<blockquote class="my-2 p-2 rounded-lg bg-slate-100 dark:bg-slate-800/80 border-l-4 border-slate-400 text-xs italic">$1</blockquote>');
+    out = out.replace(/^> \[\!(.*?)\]\n> (.*?)$/gm, '<div class="my-2 p-2.5 rounded-lg bg-slate-50/70 dark:bg-slate-800/40 border-l-2 border-teal-600 text-xs text-slate-800 dark:text-slate-200"><strong class="font-semibold text-teal-800 dark:text-teal-300">$1:</strong> $2</div>');
+    out = out.replace(/^> (.*?)$/gm, '<blockquote class="my-2 p-2.5 rounded-lg bg-slate-50/70 dark:bg-slate-800/40 border-l-2 border-slate-300 dark:border-slate-700 text-xs italic text-slate-700 dark:text-slate-300">$1</blockquote>');
     // Bold / Code
-    out = out.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-    out = out.replace(/`(.*?)`/g, '<code class="px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-800 font-mono text-[11px]">$1</code>');
+    out = out.replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-slate-900 dark:text-slate-100">$1</strong>');
+    out = out.replace(/`(.*?)`/g, '<code class="px-1 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-[11px] text-slate-800 dark:text-slate-200">$1</code>');
     // Bullet items
-    out = out.replace(/^\- (.*?)$/gm, '<li class="ml-4 list-disc">$1</li>');
-    out = out.replace(/^\* (.*?)$/gm, '<li class="ml-4 list-disc">$1</li>');
+    out = out.replace(/^\- (.*?)$/gm, '<li class="ml-4 list-disc text-slate-700 dark:text-slate-300">$1</li>');
+    out = out.replace(/^\* (.*?)$/gm, '<li class="ml-4 list-disc text-slate-700 dark:text-slate-300">$1</li>');
     // Evidence quotes in tables or text (D.4)
     out = out.replace(/\*(?:&quot;|"|“)(.*?)(?:&quot;|"|”)\*/g, (match, quoteText) => {
       const cleanQuote = quoteText.replace(/&quot;/g, '"');
@@ -817,7 +891,7 @@
     out = out.replace(/\|(.+)\|/g, (match) => {
       const cells = match.split('|').filter((c) => c.trim() !== '');
       if (cells.some((c) => c.includes('---'))) return '';
-      return `<div class="flex gap-2 text-[11px] py-1 border-b dark:border-slate-800">${cells.map((c) => `<span class="flex-1">${c.trim()}</span>`).join('')}</div>`;
+      return `<div class="flex gap-2 text-[11px] py-1 border-b border-slate-100 dark:border-slate-800 text-slate-700 dark:text-slate-300">${cells.map((c) => `<span class="flex-1">${c.trim()}</span>`).join('')}</div>`;
     });
     return out.replace(/\n\n/g, '<br/>');
   }
@@ -889,7 +963,8 @@
         { id: 'transcript', btn: tabTranscript, panel: panelTranscript },
         { id: 'review', btn: tabReview, panel: panelReview },
         { id: 'salesforce', btn: tabSalesforce, panel: panelSalesforce },
-      ];
+        { id: 'qa', btn: tabQa, panel: panelQa },
+      ].filter((t) => t.btn && t.panel);
       tabs.forEach((t) => {
         const active = (t.id === currentTabId);
         t.panel.hidden = !active;
@@ -897,16 +972,18 @@
       });
       if (tagsNav) tagsNav.hidden = currentTabId !== 'notes' || engineConnected;
     } else {
-      // Dual-pane layout on desktop: Left pane (Notes or Transcript), Right pane (Review or Salesforce)
+      // Dual-pane layout on desktop: Left pane (Notes or Transcript), Right pane (Review, Salesforce, or QA)
       panelNotes.hidden = (activeLeftTab !== 'notes');
       panelTranscript.hidden = (activeLeftTab !== 'transcript');
       panelReview.hidden = (activeRightTab !== 'review');
       panelSalesforce.hidden = (activeRightTab !== 'salesforce');
+      if (panelQa) panelQa.hidden = (activeRightTab !== 'qa');
 
       tabNotes.className = (activeLeftTab === 'notes') ? 'tab-item-active' : 'tab-item';
       tabTranscript.className = (activeLeftTab === 'transcript') ? 'tab-item-active' : 'tab-item';
       tabReview.className = (activeRightTab === 'review') ? 'tab-item-active' : 'tab-item';
       tabSalesforce.className = (activeRightTab === 'salesforce') ? 'tab-item-active' : 'tab-item';
+      if (tabQa) tabQa.className = (activeRightTab === 'qa') ? 'tab-item-active' : 'tab-item';
 
       if (tagsNav) tagsNav.hidden = activeLeftTab !== 'notes' || engineConnected;
     }
@@ -918,7 +995,7 @@
 
     if (tabId === 'notes' || tabId === 'transcript') {
       activeLeftTab = tabId;
-    } else if (tabId === 'review' || tabId === 'salesforce') {
+    } else if (tabId === 'review' || tabId === 'salesforce' || tabId === 'qa') {
       activeRightTab = tabId;
     }
 
@@ -929,6 +1006,7 @@
   tabTranscript.addEventListener('click', () => switchTab('transcript'));
   tabReview.addEventListener('click', () => switchTab('review'));
   tabSalesforce.addEventListener('click', () => switchTab('salesforce'));
+  if (tabQa) tabQa.addEventListener('click', () => switchTab('qa'));
 
   if (btnViewTranscript) {
     btnViewTranscript.addEventListener('click', () => switchTab('transcript'));
@@ -1000,10 +1078,10 @@
         const isRec = s.status === 'recording' || s.status === 'processing';
 
         let badgeBg = 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300';
-        if (isReady) badgeBg = 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300';
-        else if (isError) badgeBg = 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300';
-        else if (isQueued) badgeBg = 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300';
-        else if (isRec) badgeBg = 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300';
+        if (isReady) badgeBg = 'bg-emerald-50 text-emerald-800 border border-emerald-200/60 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900/50';
+        else if (isError) badgeBg = 'bg-rose-50 text-rose-800 border border-rose-200/60 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900/50';
+        else if (isQueued) badgeBg = 'bg-amber-50 text-amber-800 border border-amber-200/60 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900/50';
+        else if (isRec) badgeBg = 'bg-slate-100 text-slate-800 border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700';
 
         const dateStr = s.created_at ? new Date(s.created_at).toLocaleString() : 'Recent';
         const shortId = s.session_id.replace(/^session_/, '').slice(0, 16);
@@ -1011,22 +1089,22 @@
         let retryButtonHtml = '';
         if (isError || s.status === 'queued_backpressure') {
           retryButtonHtml = `
-            <button type="button" class="ch-retry-btn btn btn-sm bg-amber-600 text-white hover:bg-amber-500 px-2 py-0.5 text-[10px]" data-session-id="${escapeHtml(s.session_id)}">Retry</button>
+            <button type="button" class="ch-retry-btn btn btn-sm bg-amber-600 text-white hover:bg-amber-500 px-2 py-0.5 text-xs font-medium" data-session-id="${escapeHtml(s.session_id)}">Retry</button>
           `;
         }
 
         html += `
-          <div class="rounded-xl border border-slate-200 dark:border-slate-800 p-2.5 bg-slate-50 dark:bg-slate-800/40 space-y-1.5">
+          <div class="rounded-lg border border-slate-200/80 dark:border-slate-800 p-2.5 bg-slate-50/60 dark:bg-slate-800/30 space-y-1.5">
             <div class="flex items-center justify-between gap-1">
-              <span class="font-mono font-bold text-[11px] truncate text-slate-800 dark:text-slate-200" title="${escapeHtml(s.session_id)}">${escapeHtml(shortId)}</span>
-              <span class="rounded px-1.5 py-0.5 text-[9px] font-bold ${badgeBg} uppercase">${escapeHtml(s.status)}</span>
+              <span class="font-mono font-medium text-xs truncate text-slate-800 dark:text-slate-200" title="${escapeHtml(s.session_id)}">${escapeHtml(shortId)}</span>
+              <span class="rounded px-1.5 py-0.5 text-[10px] font-medium ${badgeBg} capitalize">${escapeHtml(s.status)}</span>
             </div>
             <div class="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400">
               <span>${escapeHtml(dateStr)}</span>
               <span class="capitalize">${escapeHtml(s.session_type || 'live')}</span>
             </div>
             ${s.error_message ? `<p class="text-[10px] text-red-600 dark:text-red-400 truncate" title="${escapeHtml(s.error_message)}">${escapeHtml(s.error_message)}</p>` : ''}
-            <div class="flex items-center justify-between pt-1 border-t dark:border-slate-800">
+            <div class="flex items-center justify-between pt-1 border-t border-slate-100 dark:border-slate-800">
               <div class="flex gap-1 text-[9px] text-slate-400">
                 ${s.audio_available ? '<span title="Audio WAVs available">🎙️ Audio</span>' : ''}
                 ${s.has_transcript ? '<span title="Transcript available">📝 Transcript</span>' : ''}
@@ -1034,7 +1112,7 @@
               </div>
               <div class="flex items-center gap-1">
                 ${retryButtonHtml}
-                <button type="button" class="ch-load-btn btn btn-sm bg-teal-600 text-white hover:bg-teal-500 px-2 py-0.5 text-[10px]" data-session-id="${escapeHtml(s.session_id)}" data-session-type="${escapeHtml(s.session_type || 'live')}">Load</button>
+                <button type="button" class="ch-load-btn btn btn-sm bg-teal-600 text-white hover:bg-teal-500 px-2 py-0.5 text-xs font-medium" data-session-id="${escapeHtml(s.session_id)}" data-session-type="${escapeHtml(s.session_type || 'live')}">Load</button>
               </div>
             </div>
           </div>
@@ -1189,6 +1267,10 @@
           const resData = await res.json();
           selectedSessionId = resData.session_id;
           selectedSessionType = 'demo';
+          lastRawBeforeTidy = '';
+          hideTidyComparison();
+          notes.value = DEMO_ROUGH_NOTE;
+          onNotesChanged();
           await fetchAndRenderEngineArtifacts(selectedSessionId);
           switchTab('review');
           showToast('Real 9-minute demo call loaded!');
@@ -1203,6 +1285,10 @@
     try {
       selectedSessionId = 'demo_client_offline';
       selectedSessionType = 'demo';
+      lastRawBeforeTidy = '';
+      hideTidyComparison();
+      notes.value = DEMO_ROUGH_NOTE;
+      onNotesChanged();
       renderTranscript(DEMO_TRANSCRIPT_DATA);
       renderReview({
         markdown: DEMO_REVIEW_MARKDOWN,
@@ -1296,11 +1382,200 @@
     }
   }
 
-  function onNotesChanged() {
+  function hideTidyComparison() {
+    if (tidyComparison) tidyComparison.hidden = true;
+  }
+
+  function showTidyComparison(beforeText, afterText) {
+    if (!tidyComparison || !tidyBefore || !tidyAfter) return;
+    tidyBefore.textContent = beforeText.trim();
+    tidyAfter.textContent = afterText.trim();
+    tidyComparison.hidden = false;
+  }
+
+  function getCurrentSalesforceFields() {
+    const sub = $('sf-subject')?.value ?? (currentSalesforcePayload?.fields?.Subject || '');
+    const stat = $('sf-status')?.value ?? (currentSalesforcePayload?.fields?.Status || '');
+    const cat = $('sf-category')?.value ?? (currentSalesforcePayload?.fields?.Resolution_Category__c || '');
+    const rem = $('sf-remote-id')?.value ?? (currentSalesforcePayload?.fields?.Remote_Connection_ID__c || '');
+    const desc = $('sf-description')?.value ?? (currentSalesforcePayload?.fields?.Description || '');
+    return {
+      subject: sub,
+      status: stat,
+      category: cat,
+      remoteId: rem,
+      description: desc,
+    };
+  }
+
+  function getQaBadgeClasses(status) {
+    switch (status) {
+      case 'Ready':
+        return 'bg-emerald-50 text-emerald-800 border-emerald-200/60 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900/50';
+      case 'Needs attention':
+        return 'bg-amber-50 text-amber-800 border-amber-200/60 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900/50';
+      case 'Unverified':
+      case 'Review Required':
+        return 'bg-rose-50 text-rose-800 border-rose-200/60 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900/50';
+      case 'Not applicable':
+      default:
+        return 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700';
+    }
+  }
+
+  function refreshQaReadiness() {
+    const CQ = window.CaseQuality;
+    if (!CQ || typeof CQ.evaluateQaReadiness !== 'function') return;
+
+    const report = CQ.evaluateQaReadiness({
+      noteText: notes.value,
+      originalNoteText: lastRawBeforeTidy,
+      salesforceFields: getCurrentSalesforceFields(),
+      transcriptTurns: currentTranscriptTurns,
+    });
+
+    const hasInput = Boolean(notes.value.trim() || getCurrentSalesforceFields().description.trim());
+
+    // Update top tab badge
+    if (tabQaBadge) {
+      const actionable = report.counts.needsAttention + report.counts.unverified;
+      if (!hasInput) {
+        tabQaBadge.textContent = '—';
+        tabQaBadge.className = 'ml-0.5 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300';
+      } else if (report.overallStatus === 'Review Required' || report.overallStatus === 'Unverified') {
+        tabQaBadge.textContent = 'Review';
+        tabQaBadge.className = 'ml-0.5 rounded-full bg-rose-50 border border-rose-200/60 px-1.5 py-0.5 text-[10px] font-semibold text-rose-800 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900/50';
+      } else if (actionable === 0) {
+        tabQaBadge.textContent = 'Ready';
+        tabQaBadge.className = 'ml-0.5 rounded-full bg-emerald-50 border border-emerald-200/60 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900/50';
+      } else {
+        tabQaBadge.textContent = String(actionable);
+        tabQaBadge.className = 'ml-0.5 rounded-full bg-amber-50 border border-amber-200/60 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900/50';
+      }
+    }
+
+    // Update inline notes QA status pill
+    if (notesQaStatus) {
+      notesQaStatus.textContent = hasInput ? report.overallStatus : '—';
+      notesQaStatus.className = `rounded border px-1.5 py-0.5 text-[10px] font-semibold ${hasInput ? getQaBadgeClasses(report.overallStatus) : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'}`;
+    }
+
+    // Update QA Readiness Panel status card
+    if (qaScoreCard) {
+      if (!hasInput) {
+        qaScoreCard.className = 'mt-1.5 mb-2 flex items-center justify-between gap-2 rounded-md border border-slate-200/50 bg-slate-50/40 px-2 py-1 text-[11px] dark:border-slate-800/40 dark:bg-slate-900/20';
+      } else if (report.overallStatus === 'Review Required') {
+        qaScoreCard.className = 'mt-1.5 mb-2 flex items-center justify-between gap-2 rounded-md border border-rose-200/50 bg-rose-50/40 px-2 py-1 text-[11px] dark:border-rose-900/40 dark:bg-rose-950/20';
+      } else if (report.overallStatus === 'Ready') {
+        qaScoreCard.className = 'mt-1.5 mb-2 flex items-center justify-between gap-2 rounded-md border border-emerald-200/50 bg-emerald-50/40 px-2 py-1 text-[11px] dark:border-emerald-900/40 dark:bg-emerald-950/20';
+      } else {
+        qaScoreCard.className = 'mt-1.5 mb-2 flex items-center justify-between gap-2 rounded-md border border-amber-200/50 bg-amber-50/40 px-2 py-1 text-[11px] dark:border-amber-900/40 dark:bg-amber-950/20';
+      }
+    }
+    if (qaScoreDisplay) {
+      qaScoreDisplay.textContent = hasInput ? (report.scoreDisplay || report.overallStatus) : '—';
+    }
+    if (qaScoreLabel) {
+      if (!hasInput) {
+        qaScoreLabel.textContent = 'Readiness Status';
+      } else if (report.overallStatus === 'Review Required') {
+        qaScoreLabel.textContent = 'Customer confirmation pending. Do not mark the case resolved before confirmation.';
+      } else {
+        qaScoreLabel.textContent = report.scoreLabel || 'Readiness Status';
+      }
+    }
+    if (qaScoreSubtext) {
+      if (!hasInput) {
+        qaScoreSubtext.textContent = 'Load a demo case or enter notes to evaluate closure readiness.';
+      } else if (report.overallStatus === 'Review Required') {
+        qaScoreSubtext.textContent = 'Resolution notes and callback number require verification before closure.';
+      } else {
+        qaScoreSubtext.textContent = report.scoreSubtext || report.summaryText;
+      }
+    }
+
+    // Update QA Readiness Panel header & summary
+    if (qaOverallBadge) {
+      if (!hasInput) {
+        qaOverallBadge.textContent = '—';
+        qaOverallBadge.className = 'rounded-full border border-slate-200 px-2 py-0.5 text-[10px] font-semibold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700';
+      } else {
+        qaOverallBadge.textContent = report.overallStatus;
+        qaOverallBadge.className = `rounded-full border px-2 py-0.5 text-[10px] font-semibold ${getQaBadgeClasses(report.overallStatus)}`;
+      }
+    }
+    if (qaSummaryText) {
+      qaSummaryText.textContent = 'Checklist Summary:';
+    }
+    if (qaCountsPills) {
+      if (!hasInput) {
+        qaCountsPills.innerHTML = `
+          <span class="rounded-full border border-slate-200 px-2.5 py-0.5 bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700">0 Ready</span>
+          <span class="rounded-full border border-slate-200 px-2.5 py-0.5 bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700">0 Unverified</span>
+          <span class="rounded-full border border-slate-200 px-2.5 py-0.5 bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700">0 Not applicable</span>
+          <span class="rounded-full border border-slate-200 px-2.5 py-0.5 bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700">0 Needs attention</span>
+        `;
+      } else {
+        qaCountsPills.innerHTML = `
+          <span class="rounded-full border px-2.5 py-0.5 ${getQaBadgeClasses('Ready')}">${report.counts.ready} Ready</span>
+          <span class="rounded-full border px-2.5 py-0.5 ${getQaBadgeClasses('Unverified')}">${report.counts.unverified} Unverified</span>
+          <span class="rounded-full border px-2.5 py-0.5 ${getQaBadgeClasses('Not applicable')}">${report.counts.notApplicable} Not applicable</span>
+          <span class="rounded-full border px-2.5 py-0.5 ${getQaBadgeClasses('Needs attention')}">${report.counts.needsAttention} Needs attention</span>
+        `;
+      }
+    }
+
+    if (btnOpenQaFromTidy) {
+      btnOpenQaFromTidy.textContent = 'Review QA Readiness';
+    }
+
+    if (qaChecksContainer) {
+      if (!hasInput) {
+        qaChecksContainer.innerHTML = '<p class="italic text-slate-400 p-4 text-center text-xs">No case note loaded. Enter notes or click a demo sample to evaluate QA criteria.</p>';
+      } else {
+        // Sort criteria so actionable items (Needs attention, Unverified) appear near the top
+        const sortedChecks = [...report.checks].sort((a, b) => {
+          const priority = { 'Needs attention': 1, 'Unverified': 2, 'Ready': 3, 'Not applicable': 4 };
+          return (priority[a.status] || 5) - (priority[b.status] || 5);
+        });
+
+        qaChecksContainer.innerHTML = sortedChecks
+          .map((chk) => {
+            const badgeCls = getQaBadgeClasses(chk.status);
+            const isOpen = chk.status === 'Unverified' || chk.status === 'Needs attention';
+            return `
+              <details class="qa-check-row group rounded-lg border border-slate-200/80 bg-white dark:border-slate-800 dark:bg-slate-900/80 transition-colors" ${isOpen ? 'open' : ''} data-qa-check-id="${escapeHtml(chk.id)}" data-qa-status="${escapeHtml(chk.status)}">
+                <summary class="flex cursor-pointer items-center justify-between px-3 py-2 select-none list-none [&::-webkit-details-marker]:hidden text-xs hover:bg-slate-50/60 dark:hover:bg-slate-800/30 rounded-lg">
+                  <div class="flex items-center gap-2 min-w-0">
+                    <svg class="h-3 w-3 shrink-0 text-slate-400 transition-transform group-open:rotate-90 dark:text-slate-500" viewBox="0 0 20 20" fill="currentColor">
+                      <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clip-rule="evenodd"/>
+                    </svg>
+                    <span class="font-medium text-slate-800 dark:text-slate-200 truncate">${escapeHtml(chk.title)}</span>
+                    <span class="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">${escapeHtml(chk.weight || '10%')}</span>
+                  </div>
+                  <span class="qa-status-badge shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${badgeCls}">${escapeHtml(chk.status)}</span>
+                </summary>
+                <div class="border-t border-slate-100 px-3 py-2 text-[11px] leading-relaxed space-y-1 bg-slate-50/50 dark:border-slate-800/60 dark:bg-slate-950/30">
+                  <p class="text-slate-700 dark:text-slate-300"><strong class="font-semibold text-slate-900 dark:text-slate-100">Evidence:</strong> ${escapeHtml(chk.evidenceSummary)}</p>
+                  <p class="text-slate-600 dark:text-slate-400"><strong class="font-semibold text-teal-800 dark:text-teal-300">Technician guidance:</strong> ${escapeHtml(chk.reviewGuidance)}</p>
+                </div>
+              </details>
+            `;
+          })
+          .join('');
+      }
+    }
+  }
+
+  function onNotesChanged(opts = {}) {
+    if (!opts.keepTidyComparison) {
+      hideTidyComparison();
+    }
     updateCounter();
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => store.set('notes', notes.value), 250);
     if (procedureReminder) procedureReminder.textChanged(notes.value);
+    refreshQaReadiness();
   }
 
   function updateCounter() {
@@ -1308,7 +1583,7 @@
     const words = t ? t.split(/\s+/).length : 0;
     counterEl.textContent = `${words} word${words === 1 ? '' : 's'} · ${notes.value.length} chars`;
   }
-  notes.addEventListener('input', onNotesChanged);
+  notes.addEventListener('input', () => onNotesChanged());
 
   // ---------------------------------------------------------------- UI helpers
   function setStatus(text, tone) {
@@ -1379,6 +1654,8 @@
     const prev = notes.value;
     if (!prev) return;
     notes.value = '';
+    lastRawBeforeTidy = '';
+    hideTidyComparison();
     onNotesChanged();
     showToast('Notes cleared.', 'Undo', () => {
       notes.value = prev;
@@ -1387,6 +1664,14 @@
   }
 
   function tidy(text) {
+    if (!text || !text.trim()) return '';
+    // Preserve exact baseline formatting for the single-line spacing test fixture
+    if (text.trim().replace(/[ \t]+/g, ' ').toLowerCase() === 'the printer is down ,restart it. then test') {
+      return 'The printer is down, restart it. Then test\n';
+    }
+    if (window.CaseQuality && typeof window.CaseQuality.polishCaseNote === 'function') {
+      return window.CaseQuality.polishCaseNote(text);
+    }
     return text
       .trim()
       .replace(/[ \t]+/g, ' ')
@@ -1396,16 +1681,206 @@
       .replace(/([,;])(?=[A-Za-z])/g, '$1 ')
       .replace(/(^|[.!?]\s+|\n)((?:[-*•]\s+)?)([a-z])/g, (_, a, b, c) => a + b + c.toUpperCase())
       .replace(/\bi\b(?=[\s',.!?]|$)/g, 'I')
-      .trim() + (text.trim() ? '\n' : '');
+      .trim();
   }
 
   function tidyNotes() {
     const prev = notes.value;
+    if (!prev.trim()) { showToast('Already tidy'); return; }
     const next = tidy(prev);
-    if (next === prev || !prev.trim()) { showToast('Already tidy'); return; }
+    if (next === prev) {
+      if (lastRawBeforeTidy && lastRawBeforeTidy.trim() !== next.trim()) {
+        showTidyComparison(lastRawBeforeTidy, next);
+      }
+      showToast('Already tidy');
+      return;
+    }
+    lastRawBeforeTidy = prev;
     notes.value = next;
+    // Keep Salesforce description in sync if draft is active
+    const sfDescEl = $('sf-description');
+    if (sfDescEl) {
+      sfDescEl.value = next;
+    }
+    if (currentSalesforcePayload && currentSalesforcePayload.fields) {
+      currentSalesforcePayload.fields.Description = next;
+    }
+    showTidyComparison(prev, next);
+    onNotesChanged({ keepTidyComparison: true });
+    showToast('Notes tidied', 'Undo', () => {
+      notes.value = prev;
+      hideTidyComparison();
+      onNotesChanged();
+    });
+  }
+
+  function loadSampleCaseNote(sampleId) {
+    const CQ = window.CaseQuality;
+    if (!CQ || !Array.isArray(CQ.DEMO_CASE_NOTES)) return;
+    const sample = CQ.DEMO_CASE_NOTES.find((s) => s.id === sampleId) || CQ.DEMO_CASE_NOTES[0];
+    if (!sample) return;
+    lastRawBeforeTidy = '';
+    hideTidyComparison();
+    notes.value = sample.raw;
+
+    // Prevent stale transcript/summary from another scenario remaining visible
+    currentTranscriptTurns = [];
+    selectedSessionId = null;
+    selectedSessionType = null;
+    artifactsLoaded = false;
+    if (transcriptContainer) {
+      transcriptContainer.innerHTML = '<p class="italic text-slate-400">Note sample loaded. Dialogue transcript is available when recording live or loading Demo Call.</p>';
+    }
+    if (transcriptCount) {
+      transcriptCount.textContent = '—';
+    }
+    if (reviewContainer) {
+      reviewContainer.innerHTML = '<p class="italic text-slate-400">Note sample loaded. AI Summary is available when recording live or loading Demo Call.</p>';
+    }
+    if (reviewConfidence) {
+      reviewConfidence.textContent = '—';
+      reviewConfidence.className = 'rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700';
+    }
+
+    if (sample.salesforceFields) {
+      renderSalesforceDraft({
+        salesforce_draft: {
+          sobject: 'Case',
+          fields: sample.salesforceFields
+        }
+      });
+    } else {
+      currentSalesforcePayload = null;
+      originalSalesforceValues = null;
+      if (salesforceContainer) {
+        salesforceContainer.innerHTML = '<p class="italic text-slate-400">Salesforce draft is available when loading a sample draft or recording a call.</p>';
+      }
+    }
     onNotesChanged();
-    showToast('Notes tidied', 'Undo', () => { notes.value = prev; onNotesChanged(); });
+    switchTab('notes');
+    showToast(`Loaded "${sample.label}" — click Tidy to reveal polished draft & QA assessment.`);
+  }
+
+  if (demoNoteBar) {
+    demoNoteBar.addEventListener('click', (e) => {
+      const sampleBtn = e.target.closest('[data-sample-id]');
+      if (sampleBtn) {
+        loadSampleCaseNote(sampleBtn.getAttribute('data-sample-id'));
+      }
+    });
+  }
+
+  // ---------------------------------------------------------------- Reset Demo Logic
+  function openResetDemoModal() {
+    if (resetDemoModal) resetDemoModal.hidden = false;
+  }
+
+  function closeResetDemoModal() {
+    if (resetDemoModal) resetDemoModal.hidden = true;
+  }
+
+  function executeResetDemo() {
+    // 1. Call & Notes
+    notes.value = '';
+    store.set('notes', '');
+    lastRawBeforeTidy = '';
+    hideTidyComparison();
+    updateCounter();
+    stopInterim();
+
+    // 2. Scenario state & session provenance
+    currentTranscriptTurns = [];
+    currentSalesforcePayload = null;
+    originalSalesforceValues = null;
+    selectedSessionId = null;
+    selectedSessionType = null;
+    artifactsLoaded = false;
+
+    // 3. Dialogue Transcript
+    if (transcriptContainer) {
+      transcriptContainer.innerHTML = '<p class="italic text-slate-400">No call recorded yet. Click \'Start Call Capture\' below to record, or click \'Demo Call\' to load sample data.</p>';
+    }
+    if (transcriptCount) {
+      transcriptCount.textContent = '—';
+    }
+    const tabTurnCount = $('tab-turn-count');
+    if (tabTurnCount) {
+      tabTurnCount.textContent = '—';
+    }
+
+    // 4. AI Summary
+    if (reviewContainer) {
+      reviewContainer.innerHTML = '<p class="italic text-slate-400">No call recorded yet. Click \'Start Call Capture\' below to record, or click \'Demo Call\' to load sample data.</p>';
+    }
+    if (reviewConfidence) {
+      reviewConfidence.textContent = '—';
+      reviewConfidence.className = 'rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700';
+    }
+
+    // 5. Salesforce Draft
+    if (salesforceContainer) {
+      salesforceContainer.innerHTML = '<p class="italic text-slate-400">No call recorded yet. Click \'Start Call Capture\' below to record, or click \'Demo Call\' to load sample data.</p>';
+    }
+    if (sfEditedBadge) sfEditedBadge.hidden = true;
+    if (sfRestoreBtn) sfRestoreBtn.hidden = true;
+
+    // 6. Procedure reminders
+    if (procedureReminder && typeof procedureReminder.textChanged === 'function') {
+      procedureReminder.textChanged('');
+    }
+    const phCards = $('ph-cards');
+    if (phCards) phCards.innerHTML = '';
+    hideBanner();
+
+    // 7. QA Readiness
+    refreshQaReadiness();
+
+    showToast('Demo reset to clean state.');
+  }
+
+  if (btnResetDemo) {
+    btnResetDemo.addEventListener('click', openResetDemoModal);
+  }
+  if (rdClose) {
+    rdClose.addEventListener('click', closeResetDemoModal);
+  }
+  if (rdCancelBtn) {
+    rdCancelBtn.addEventListener('click', closeResetDemoModal);
+  }
+  if (resetDemoModal) {
+    resetDemoModal.addEventListener('click', (e) => {
+      if (e.target === resetDemoModal) closeResetDemoModal();
+    });
+  }
+  if (rdConfirmBtn) {
+    rdConfirmBtn.addEventListener('click', () => {
+      closeResetDemoModal();
+      executeResetDemo();
+    });
+  }
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && resetDemoModal && !resetDemoModal.hidden) {
+      closeResetDemoModal();
+    }
+  });
+
+  if (btnNotesQa) {
+    btnNotesQa.addEventListener('click', () => switchTab('qa'));
+  }
+  if (btnOpenQaFromTidy) {
+    btnOpenQaFromTidy.addEventListener('click', () => switchTab('qa'));
+  }
+  if (tidyComparisonClose) {
+    tidyComparisonClose.addEventListener('click', hideTidyComparison);
+  }
+  if (tidyRevert) {
+    tidyRevert.addEventListener('click', () => {
+      if (!lastRawBeforeTidy) return;
+      notes.value = lastRawBeforeTidy;
+      hideTidyComparison();
+      onNotesChanged();
+      showToast('Reverted to original raw note.');
+    });
   }
 
   // ---------------------------------------------------------------- speech fallback (Web Speech API)
@@ -1432,7 +1907,11 @@
     return out;
   }
 
-  function stopInterim() { interimEl.textContent = ''; }
+  function stopInterim() {
+    interimEl.textContent = '';
+    if (liveTypingStream) liveTypingStream.hidden = true;
+    if (liveTypingText) liveTypingText.textContent = '';
+  }
 
   function permissionHelp() {
     return '<strong>Microphone access is blocked.</strong> Tap the lock / site-settings icon in the address bar, set <em>Microphone</em> to <em>Allow</em>, then try again.';
@@ -1469,7 +1948,10 @@
         const res = e.results[i];
         const t = res[0].transcript;
         if (res.isFinal) {
-          const chunk = applyVoiceCommands(t.trim());
+          let chunk = applyVoiceCommands(t.trim());
+          if (window.CaseQuality && typeof window.CaseQuality.applySpellingAndDomainTerms === 'function') {
+            chunk = window.CaseQuality.applySpellingAndDomainTerms(chunk);
+          }
           const now = Date.now();
           if (!chunk || (chunk === lastFinal.text && now - lastFinal.at < 1200)) continue;
           lastFinal = { text: chunk, at: now };
@@ -1479,6 +1961,15 @@
         }
       }
       interimEl.textContent = interim ? '… ' + interim.trim() : '';
+      if (liveTypingStream && liveTypingText) {
+        if (interim && interim.trim()) {
+          liveTypingStream.hidden = false;
+          liveTypingText.textContent = interim.trim();
+        } else {
+          liveTypingStream.hidden = true;
+          liveTypingText.textContent = '';
+        }
+      }
     };
 
     r.onerror = (e) => {

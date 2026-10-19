@@ -163,7 +163,6 @@ class SessionManager:
         self._q_loop: queue.Queue = queue.Queue()
         self._capture_stop_event = threading.Event()
         self._writer_threads: list[threading.Thread] = []
-
         # Synchronization lock
         self._lock = threading.RLock()
 
@@ -175,8 +174,31 @@ class SessionManager:
         self._worker_thread: Optional[threading.Thread] = None
         self._worker_shutdown_event = threading.Event()
 
+        # Shared pre-warmed transcription pipeline (zero reload overhead per call)
+        self._shared_pipeline: Optional[TranscriptionPipeline] = None
+
         # Recover interrupted/queued sessions from previous run
         self._recover_startup_sessions()
+        self.prewarm_model()
+
+    def get_pipeline(self) -> TranscriptionPipeline:
+        """Returns the shared, pre-warmed transcription pipeline."""
+        with self._lock:
+            if self._shared_pipeline is None:
+                self._shared_pipeline = TranscriptionPipeline(model_name=self.whisper_model)
+            return self._shared_pipeline
+
+    def prewarm_model(self) -> None:
+        """Asynchronously pre-warms the Whisper model into RAM at startup."""
+        def _warm():
+            try:
+                pipe = self.get_pipeline()
+                if hasattr(pipe.provider, "_lazy_init"):
+                    pipe.provider._lazy_init()
+                logger.info("Local Whisper model pre-warmed and ready for zero-latency capture.")
+            except Exception as e:
+                logger.warning(f"Model pre-warm completed with note: {e}")
+        threading.Thread(target=_warm, name="SpeakModelPrewarmer", daemon=True).start()
 
     # ---------------------------------------------------------------- Worker Lifecycle
     def start_worker(self) -> None:
@@ -770,6 +792,46 @@ class SessionManager:
                 "message": msg
             }
 
+    def cancel_session(self, session_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Cancels active recording or processing and immediately resets capture engine to idle.
+        """
+        with self._lock:
+            target_id = session_id or self.capture_session_id
+            if self.capture_state == "recording":
+                self._cleanup_streams()
+                self.capture_state = "idle"
+                if self.capture_session_id:
+                    s_dir = self.output_dir / self.capture_session_id
+                    if s_dir.exists():
+                        try:
+                            meta = self._read_metadata(s_dir)
+                            meta["status"] = "cancelled"
+                            meta["stage"] = "cancelled"
+                            meta["error_message"] = "Capture cancelled by user."
+                            atomic_write_json(s_dir / "session_metadata.json", meta)
+                        except Exception:
+                            pass
+                self.capture_session_id = None
+                return {"status": "cancelled", "message": "Call recording cancelled."}
+
+            if target_id:
+                s_dir = self.output_dir / target_id
+                if s_dir.exists():
+                    try:
+                        meta = self._read_metadata(s_dir)
+                        meta["status"] = "cancelled"
+                        meta["stage"] = "cancelled"
+                        meta["error_message"] = "Processing cancelled by user."
+                        atomic_write_json(s_dir / "session_metadata.json", meta)
+                    except Exception:
+                        pass
+                self._active_jobs.discard(target_id)
+
+            self.capture_state = "idle"
+            self.capture_session_id = None
+            return {"status": "cancelled", "message": "Session processing cancelled."}
+
     # ---------------------------------------------------------------- Background Worker
     def _queue_worker_loop(self):
         """Single-worker consumer thread processing queued sessions one by one."""
@@ -839,7 +901,7 @@ class SessionManager:
                 except Exception:
                     call_start_dt = None
 
-            pipeline = TranscriptionPipeline(model_name=self.whisper_model)
+            pipeline = self.get_pipeline()
             pipeline.process_session(
                 consultant_audio_path=str(mic_path),
                 client_audio_path=str(loop_path),

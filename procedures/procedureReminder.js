@@ -72,18 +72,18 @@
     // ------------------------------------------------------------ cards
     function addCard(p, isNew) {
       if (visible.has(p.id)) return;
-      const card = el('article', 'rounded-xl border border-indigo-300 bg-indigo-50 p-3 text-sm shadow-sm dark:border-indigo-500/40 dark:bg-indigo-950/50');
+      const card = el('article', 'rounded-xl border border-slate-200/80 bg-white p-3 text-sm dark:border-slate-800 dark:bg-slate-900');
       card.dataset.procedureId = p.id;
       card.setAttribute('aria-label', 'Procedure Hub reminder: ' + p.title);
 
       const top = el('div', 'flex items-start justify-between gap-2');
       const body = el('div', 'min-w-0');
       body.append(
-        el('p', 'text-[11px] font-semibold uppercase tracking-wide text-indigo-700 dark:text-indigo-300', 'Procedure Hub · possible relevant procedure'),
+        el('p', 'text-xs font-medium text-slate-500 dark:text-slate-400', 'Procedure Hub · possible relevant procedure'),
         el('p', 'mt-0.5 truncate font-semibold text-slate-900 dark:text-slate-100', p.title),
         el('p', 'mt-0.5 line-clamp-2 text-xs text-slate-600 dark:text-slate-300', p.instruction),
       );
-      const close = el('button', 'grid h-8 w-8 shrink-0 place-items-center rounded-lg text-lg leading-none text-slate-500 hover:bg-indigo-100 hover:text-slate-900 dark:hover:bg-indigo-900 dark:hover:text-white', '×');
+      const close = el('button', 'grid h-8 w-8 shrink-0 place-items-center rounded-lg text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200', '×');
       close.type = 'button';
       close.dataset.action = 'dismiss';
       close.setAttribute('aria-label', 'Dismiss ' + p.title);
@@ -91,12 +91,12 @@
       top.append(body, close);
 
       const row = el('div', 'mt-2 flex items-center gap-3');
-      const view = el('button', 'rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400', 'View Procedure');
+      const view = el('button', 'rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-teal-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 transition', 'View Procedure');
       view.type = 'button';
       view.dataset.action = 'view';
       view.addEventListener('click', () => openProcedure(p.id));
       row.append(view);
-      if (p.isDemo) row.append(el('span', 'text-[11px] text-slate-500 dark:text-slate-400', 'Demo data'));
+      if (p.isDemo) row.append(el('span', 'text-[11px] text-slate-400 dark:text-slate-500', 'Demo data'));
 
       card.append(top, row);
       cards.append(card);

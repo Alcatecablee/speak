@@ -39,7 +39,16 @@ DOMAIN_CATALOG: Dict[str, Dict[str, str]] = {
     "epson": {"normalized": "Epson Printer", "category": "HARDWARE"},
     "scanner": {"normalized": "Barcode Scanner", "category": "HARDWARE"},
     "terminal": {"normalized": "POS Terminal", "category": "HARDWARE"},
-    "till": {"normalized": "POS Till / Cash Drawer", "category": "HARDWARE"}
+    "till": {"normalized": "POS Till / Cash Drawer", "category": "HARDWARE"},
+    "kingpos": {"normalized": "Kingpos Application", "category": "SYSTEM_MODULE"},
+    "king pos": {"normalized": "Kingpos Application", "category": "SYSTEM_MODULE", "method": "PHONETIC_HEURISTIC", "confidence": "0.85"},
+    "mc1": {"normalized": "Main Controller 1 (MC1)", "category": "HARDWARE"},
+    "mc2": {"normalized": "Main Controller 2 (MC2)", "category": "HARDWARE"},
+    "ped": {"normalized": "Adumo PED / Card Terminal", "category": "HARDWARE"},
+    "pax": {"normalized": "PAX Payment Terminal", "category": "HARDWARE"},
+    "till roll": {"normalized": "Thermal Till Roll Consumable", "category": "CONSUMABLE"},
+    "till rolls": {"normalized": "Thermal Till Roll Consumable", "category": "CONSUMABLE"},
+    "polokwane": {"normalized": "Polokwane Regional Branch", "category": "LOCATION"}
 }
 
 

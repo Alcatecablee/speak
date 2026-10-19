@@ -15,7 +15,7 @@ class TranscriptionPipeline:
     and produce a unified, timestamped, speaker-labeled dialogue transcript.
     """
     
-    def __init__(self, provider: Optional[BaseTranscriptionProvider] = None, provider_type: str = "whisper-hf", **provider_kwargs):
+    def __init__(self, provider: Optional[BaseTranscriptionProvider] = None, provider_type: Optional[str] = None, **provider_kwargs):
         if provider is not None:
             self.provider = provider
         else:

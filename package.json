@@ -7,8 +7,8 @@
     "build:css": "tailwindcss -i ./src/input.css -o ./styles.css --minify",
     "watch:css": "tailwindcss -i ./src/input.css -o ./styles.css --watch",
     "serve": "node dev-server.mjs",
-    "test": "node --test tests/procedures.test.mjs && node tests/verify.mjs",
-    "test:unit": "node --test tests/procedures.test.mjs",
+    "test": "node --test tests/*.test.mjs && node tests/verify.mjs",
+    "test:unit": "node --test tests/*.test.mjs",
     "test:e2e": "node tests/verify.mjs"
   },
   "devDependencies": {

@@ -19,7 +19,7 @@ const titles = async (svc, text) => (await svc.findRelevantProcedures(text)).map
 test('1. relevant phrases detect the correct procedure', async () => {
   const svc = createDemoProcedureService();
   assert.deepEqual(await titles(svc, 'Client said she cannot cash up because there are open tables.'), ['Open Tables Before Cash-Up']);
-  assert.deepEqual(await titles(svc, "Client requested till roll slips and I advised them that we don't supply them outside Limpopo."), ['Till Roll Slip Supply']);
+  assert.deepEqual(await titles(svc, "Client requested till roll slips and I advised them that we don't supply them outside Polokwane."), ['IMPORTANT: TILL ROLL SUPPLY RESTRICTION']);
   assert.deepEqual(await titles(svc, 'The kitchen printer is offline and orders are not coming through.'), ['Kitchen Printer Offline']);
   assert.deepEqual(await titles(svc, 'Adumo PED offline at the client, card machine not connecting.'), ['Adumo PED Troubleshooting']);
   assert.deepEqual(await titles(svc, 'client said she cannot cash-up because of tables open'), ['Open Tables Before Cash-Up']);
@@ -29,8 +29,8 @@ test('2. a single weak keyword does not trigger an alert', async () => {
   const svc = createDemoProcedureService();
   for (const text of [
     'I was working on another case and saw a till roll in the store.',
-    'cash-up', 'Adumo', 'the printer', 'open tables', 'Limpopo', 'kitchen printer', 'terminal offline',
-    'I supply stock to Limpopo', 'receipt printer offline',
+    'cash-up', 'Adumo', 'the printer', 'open tables', 'Polokwane', 'kitchen printer', 'terminal offline',
+    'I supply stock to Polokwane', 'receipt printer offline',
   ]) assert.deepEqual(await titles(svc, text), [], `should not trigger: "${text}"`);
 });
 
@@ -51,11 +51,16 @@ test('3b. a phrase is never double-counted ("till roll slips" is one concept)', 
 
 test('3c. required concepts gate eligibility', () => {
   const p = demo.find((x) => x.id === 'demo-till-roll-supply');
-  const r = relevance.scoreProcedure(p, 'we do not supply to Limpopo');
+  const r = relevance.scoreProcedure(p, 'we do not supply to Polokwane');
   assert.equal(r.eligible, false);
 });
 
-test('3d. results are ranked by score', async () => {
+test('3d. typing "till roll supply" triggers IMPORTANT: TILL ROLL SUPPLY RESTRICTION', async () => {
+  const svc = createDemoProcedureService();
+  assert.deepEqual(await titles(svc, 'till roll supply'), ['IMPORTANT: TILL ROLL SUPPLY RESTRICTION']);
+});
+
+test('3e. results are ranked by score', async () => {
   const svc = createDemoProcedureService();
   const res = await svc.findRelevantProcedures('adumo ped offline and cannot cash up with open tables');
   assert.equal(res.length, 2);

@@ -33,8 +33,8 @@ class WhisperHFProvider(BaseTranscriptionProvider):
             import torch
             from transformers import pipeline
             
-            # Configure multi-threading for maximum CPU performance
-            cpu_cores = os.cpu_count() or 4
+            # Configure multi-threading avoiding hyperthread lock contention
+            cpu_cores = min(4, os.cpu_count() or 4)
             torch.set_num_threads(cpu_cores)
             
             if self.device is None:
@@ -135,6 +135,75 @@ class WhisperHFProvider(BaseTranscriptionProvider):
             logger.error(f"Error during transcription of {audio_path} ({speaker_label}): {e}", exc_info=True)
             raise e
 
+POS_DOMAIN_INITIAL_PROMPT = (
+    "Kingpos, MC1, MC2, MC3, POS1, POS2, Adumo, Adumo PED, AnyShop, GRV, GRVs, "
+    "MicroSIP, GAAP, GAAP PAY, PAX, Polokwane, Limpopo, SQL Agent service, Back Office, "
+    "till rolls, cash-up, receipt printer, butternut puree, stock variance, recipe batch."
+)
+
+class FasterWhisperProvider(BaseTranscriptionProvider):
+    """High-performance local Whisper provider using CTranslate2 INT8 quantization and Silero VAD."""
+    
+    def __init__(self, model_size: str = "tiny", device: str = "cpu", compute_type: str = "int8", cpu_threads: Optional[int] = None, initial_prompt: Optional[str] = None):
+        self.model_size = model_size
+        self.device = device
+        self.compute_type = compute_type
+        # Physical cores default avoids OpenMP thread contention on hyperthreaded CPUs
+        self.cpu_threads = cpu_threads or min(4, os.cpu_count() or 4)
+        self.initial_prompt = initial_prompt or POS_DOMAIN_INITIAL_PROMPT
+        self._model = None
+        
+    def _lazy_init(self):
+        if self._model is None:
+            logger.info(f"Loading faster-whisper model '{self.model_size}' ({self.compute_type} on {self.device}, {self.cpu_threads} CPU threads)...")
+            from faster_whisper import WhisperModel
+            self._model = WhisperModel(
+                self.model_size,
+                device=self.device,
+                compute_type=self.compute_type,
+                cpu_threads=self.cpu_threads
+            )
+            logger.info("faster-whisper model initialized successfully.")
+            
+    def transcribe(self, audio_path: str, speaker_label: str = "SPEAKER") -> List[TranscriptSegment]:
+        if not os.path.exists(audio_path):
+            raise FileNotFoundError(f"Audio file not found: {audio_path}")
+            
+        file_size = os.path.getsize(audio_path)
+        if file_size < 1000:
+            logger.warning(f"Audio file {audio_path} is too small ({file_size} bytes). Skipping.")
+            return []
+            
+        self._lazy_init()
+        logger.info(f"Transcribing {speaker_label} via faster-whisper ({file_size / (1024*1024):.2f} MB): {audio_path}...")
+        
+        segments_out: List[TranscriptSegment] = []
+        try:
+            # Silero VAD filters out dead air/silence automatically before Whisper decoding
+            segments, info = self._model.transcribe(
+                audio_path,
+                beam_size=1,
+                language="en",
+                task="transcribe",
+                initial_prompt=self.initial_prompt,
+                vad_filter=True,
+                vad_parameters=dict(min_silence_duration_ms=500)
+            )
+            for seg in segments:
+                text = seg.text.strip()
+                if text:
+                    segments_out.append(TranscriptSegment(
+                        start_seconds=round(seg.start, 2),
+                        end_seconds=round(seg.end, 2),
+                        text=text,
+                        speaker=speaker_label
+                    ))
+            logger.info(f"Successfully transcribed {speaker_label} with faster-whisper: {len(segments_out)} segments extracted.")
+            return segments_out
+        except Exception as e:
+            logger.error(f"Error during faster-whisper transcription of {audio_path} ({speaker_label}): {e}", exc_info=True)
+            raise e
+
 class MockTranscriptionProvider(BaseTranscriptionProvider):
     """Deterministic mock provider for offline unit tests and CI."""
     
@@ -163,12 +232,27 @@ class MockTranscriptionProvider(BaseTranscriptionProvider):
                 TranscriptSegment(start_seconds=29.0, end_seconds=31.0, text="No, that is all. Thank you!", speaker=speaker_label)
             ]
 
-def get_transcription_provider(provider_type: str = "whisper-hf", **kwargs) -> BaseTranscriptionProvider:
+def get_transcription_provider(provider_type: Optional[str] = None, **kwargs) -> BaseTranscriptionProvider:
     """Factory to instantiate the configured transcription engine."""
-    if provider_type == "whisper-hf":
+    if provider_type == "mock":
+        return MockTranscriptionProvider(**kwargs)
+        
+    try:
+        import faster_whisper
+        has_faster_whisper = True
+    except ImportError:
+        has_faster_whisper = False
+
+    if provider_type == "faster-whisper" or (provider_type in (None, "whisper-hf", "auto") and has_faster_whisper):
+        raw_model = kwargs.get("model_size") or kwargs.get("model_name", "tiny")
+        model_size = raw_model
+        if "whisper-" in model_size:
+            model_size = model_size.split("whisper-")[-1]
+        if "/" in model_size:
+            model_size = model_size.split("/")[-1]
+        return FasterWhisperProvider(model_size=model_size)
+    elif provider_type == "whisper-hf" or not has_faster_whisper:
         model_name = kwargs.get("model_name", "openai/whisper-tiny")
         return WhisperHFProvider(model_name=model_name)
-    elif provider_type == "mock":
-        return MockTranscriptionProvider(**kwargs)
     else:
         raise ValueError(f"Unknown transcription provider: {provider_type}")

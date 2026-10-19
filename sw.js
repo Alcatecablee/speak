@@ -11,6 +11,7 @@ const SHELL = [
   './procedures/procedureService.js',
   './procedures/reminderTracker.js',
   './procedures/procedureReminder.js',
+  './procedures/caseQuality.js',
   './manifest.webmanifest',
   './icons/icon.svg',
   './icons/icon-192.png',

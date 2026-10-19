@@ -254,6 +254,19 @@ def stop_capture(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/capture/cancel")
+def cancel_capture(
+    session_id: Optional[str] = Query(default=None, description="Session ID to cancel (optional)"),
+    manager: SessionManager = Depends(get_session_manager),
+    _auth: bool = Depends(verify_auth_token)
+):
+    """Cancels active recording or queued processing and resets engine to idle."""
+    try:
+        return manager.cancel_session(session_id=session_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/transcript")
 def get_transcript(
     session_id: str = Query(..., description="Unique session ID (required)"),

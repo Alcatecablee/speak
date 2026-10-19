@@ -313,6 +313,25 @@ try {
     await ctx.close();
   }
   {
+    // Typed "till roll supply" triggers IMPORTANT: TILL ROLL SUPPLY RESTRICTION & verifies panel content
+    const { ctx, page } = await newPage({ viewport: { width: 1280, height: 800 } });
+    await page.fill('#notes', 'till roll supply');
+    await page.waitForSelector('#ph-cards [data-procedure-id="demo-till-roll-supply"]');
+    const card = page.locator('#ph-cards [data-procedure-id="demo-till-roll-supply"]');
+    check('typed "till roll supply" surfaces procedure card', await card.isVisible());
+    const cardText = await card.innerText();
+    check('reminder card displays exact title', cardText.includes('IMPORTANT: TILL ROLL SUPPLY RESTRICTION'));
+    check('reminder card displays PROCEDURE HUB label', cardText.toLowerCase().includes('procedure hub · possible relevant procedure'));
+    await card.locator('[data-action="view"]').click();
+    await page.waitForSelector('#ph-modal:not([hidden])');
+    check('panel displays exact title', (await page.locator('#ph-m-title').innerText()) === 'IMPORTANT: TILL ROLL SUPPLY RESTRICTION');
+    check('panel displays exact procedure instruction', (await page.locator('#ph-m-instruction').innerText()) === 'Effective immediately, till roll slips may only be supplied to clients in Polokwane. Do not supply outside Polokwane.');
+    await page.click('#ph-m-close');
+    await page.waitForSelector('#ph-modal', { state: 'hidden' });
+    check('panel closes cleanly after view procedure', await page.locator('#ph-modal').isHidden());
+    await ctx.close();
+  }
+  {
     // Isolation: swap the service and the UI follows it – no demo data is baked into the UI.
     const { ctx, page } = await newPage({}, {
       init: () => {
@@ -668,6 +687,89 @@ try {
     // Click an evidence link to trigger dialogue jump
     await evidenceLinks.first().click();
     check('clicking evidence link switches to transcript panel', await page.locator('#panel-transcript').isVisible());
+
+    // 5. Reset Demo Action Across All Tabs
+    console.log('\nReset Demo Action');
+    const btnResetDemo = page.locator('#btn-reset-demo');
+    const resetModal = page.locator('#reset-demo-modal');
+    const rdCancel = page.locator('#rd-cancel-btn');
+    const rdConfirm = page.locator('#rd-confirm-btn');
+
+    check('reset demo button exists in UI', await btnResetDemo.isVisible());
+    check('reset demo modal initially hidden', await resetModal.isHidden());
+
+    // Load Demo Call first
+    await page.click('#btn-load-sample');
+    await page.waitForTimeout(400);
+    check('demo note loaded in notes editor', (await page.locator('#notes').inputValue()).includes('cheesecake recipe'));
+    check('QA tab shows Review Required badge', (await page.locator('#tab-qa-badge').innerText()) === 'Review');
+
+    // Click Reset Demo -> confirmation modal appears
+    await btnResetDemo.click();
+    check('reset confirmation modal appears on click', await resetModal.isVisible());
+
+    // Click Cancel -> modal closes, data remains intact
+    await rdCancel.click();
+    check('cancelling reset closes modal', await resetModal.isHidden());
+    check('notes intact after cancel', (await page.locator('#notes').inputValue()).includes('cheesecake recipe'));
+    check('QA badge intact after cancel', (await page.locator('#tab-qa-badge').innerText()) === 'Review');
+
+    // Open modal again and confirm reset
+    await btnResetDemo.click();
+    await rdConfirm.click();
+    check('confirming reset closes modal', await resetModal.isHidden());
+
+    // Check Call & Notes tab state
+    check('notes textarea empty after reset', (await page.locator('#notes').inputValue()) === '');
+    check('counter shows 0 words after reset', (await page.locator('#counter').innerText()).includes('0 words'));
+    check('tidy comparison hidden after reset', await page.locator('#tidy-comparison').isHidden());
+
+    // Check Dialogue tab
+    await page.click('#tab-transcript');
+    const transcriptAfter = await page.locator('#transcript-container').innerText();
+    check('dialogue container reset to empty state', transcriptAfter.includes('No call recorded yet'));
+    check('dialogue turn count badge reset', (await page.locator('#transcript-count').innerText()) === '—');
+
+    // Check AI Summary tab
+    await page.click('#tab-review');
+    const reviewAfter = await page.locator('#review-container').innerText();
+    check('AI summary container reset to empty state', reviewAfter.includes('No call recorded yet'));
+    check('confidence badge reset to —', (await page.locator('#review-confidence').innerText()) === '—');
+
+    // Check Salesforce Draft tab
+    await page.click('#tab-salesforce');
+    const sfAfter = await page.locator('#salesforce-container').innerText();
+    check('salesforce container reset to empty state', sfAfter.includes('No call recorded yet'));
+    check('salesforce edited badge hidden after reset', await page.locator('#sf-edited-badge').isHidden());
+
+    // Check QA Readiness tab
+    await page.click('#tab-qa');
+    check('QA tab badge reset to —', (await page.locator('#tab-qa-badge').innerText()) === '—');
+    check('QA overall badge reset to —', (await page.locator('#qa-overall-badge').innerText()) === '—');
+    check('QA score display reset to —', (await page.locator('#qa-score-display').innerText()) === '—');
+    const qaChecksAfter = await page.locator('#qa-checks-container').innerText();
+    check('QA checks container shows neutral message', qaChecksAfter.includes('No case note loaded'));
+
+    // Switch across tabs to ensure no stale data reappears
+    await page.click('#tab-notes');
+    check('switching back to notes remains empty', (await page.locator('#notes').inputValue()) === '');
+    await page.click('#tab-review');
+    check('switching back to summary remains empty', (await page.locator('#review-container').innerText()).includes('No call recorded yet'));
+
+    // Verify user preferences preserved: lang
+    const currentLang = await page.locator('#lang').inputValue();
+    check('user language preference preserved', currentLang.length > 0);
+
+    // Verify existing Clear button still works with its Undo toast
+    await page.click('#tab-notes');
+    await page.locator('#notes').fill('Manual test note for clear button');
+    await page.locator('#notes').dispatchEvent('input');
+    await page.click('#clear');
+    check('clear button clears notes only', (await page.locator('#notes').inputValue()) === '');
+    const toastAction = page.locator('#toast-action');
+    check('undo button visible in toast', await toastAction.isVisible() && (await toastAction.innerText()) === 'Undo');
+    await toastAction.click();
+    check('undo restores manual note', (await page.locator('#notes').inputValue()) === 'Manual test note for clear button');
 
     check('no uncaught JS errors in UI sprint tests', errors.length === 0, errors.join('; '));
     await ctx.close();

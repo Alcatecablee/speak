@@ -13,18 +13,18 @@
   return [
     {
       id: 'demo-till-roll-supply',
-      title: 'Till Roll Slip Supply',
+      title: 'IMPORTANT: TILL ROLL SUPPLY RESTRICTION',
       status: 'Active',
       version: 1,
       effectiveDate: '2026-10-01',
       lastUpdated: '2026-10-01T09:30:00+02:00',
-      instruction: 'Do not supply clients with till roll slips outside Limpopo. Till roll slips may only be supplied to clients in Limpopo.',
+      instruction: 'Effective immediately, till roll slips may only be supplied to clients in Polokwane. Do not supply outside Polokwane.',
       source: SOURCE,
       isDemo: true,
       concepts: [
         { name: 'till roll', terms: ['till roll', 'till roll slip', 'till roll slips', 'till rolls'], weight: 3, required: true },
-        { name: 'supply', terms: ['supply', 'supplied', 'supplying', "we don't supply", 'dont supply', 'we dont supply', 'cannot supply', 'wont supply'], weight: 2 },
-        { name: 'limpopo', terms: ['limpopo', 'polokwane', 'tzaneen', 'mokopane', 'thohoyandou', 'outside limpopo', 'in limpopo'], weight: 2 },
+        { name: 'supply', terms: ['supply', 'supplied', 'supplying', "we don't supply", 'dont supply', 'we dont supply', 'cannot supply', 'wont supply', 'restriction'], weight: 2 },
+        { name: 'polokwane', terms: ['polokwane', 'outside polokwane', 'in polokwane'], weight: 2 },
       ],
     },
     {
